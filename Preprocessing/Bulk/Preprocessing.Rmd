@@ -1,0 +1,655 @@
+---
+title: "Preprocessing2"
+author: "Hanne Puype"
+date: "8 november 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(edgeR)
+library(biomaRt)
+```
+
+# Datasets
+## Alzheimer's disease
+GSE174367
+```{r}
+counts_AD <- read.table("data_HTSC_CTX.txt", header = T, sep = '\t', stringsAsFactors = FALSE, check.names = FALSE)
+counts_AD <- rownames_to_column(counts_AD)
+colnames(counts_AD)[names(counts_AD) == "rowname"] <- "GeneID"
+#head(counts_AD)
+dim(counts_AD)
+```
+
+```{r}
+anno_AD <- read.csv("targets.CTX.csv")
+#head(anno_AD)
+#tail(anno_AD)
+dim(anno_AD)
+colnames(anno_AD)[names(anno_AD) == "SampleID"] <- "Sample"
+```
+
+Keep metadata: Sample, Neuropath.DX.1, Sex, Tangle.Stage, Plaque.Stage, Diagnosis
+
+How many AD and controls?
+```{r}
+anno_AD %>%
+  group_by(Diagnosis) %>%
+  summarise(n())
+anno_AD %>%
+  group_by(Neuropath.Dx.1) %>%
+  summarise(n())
+anno_AD %>% 
+  group_by(Sex) %>%
+  summarise(n())
+anno_AD %>% 
+  group_by(Tangle.Stage) %>%
+  summarise(n())
+anno_AD %>% 
+  group_by(Plaque.Stage) %>%
+  summarise(n())
+```
+
+## Depression
+GSE101521
+```{r}
+counts_MDD1 <- read.table("GSE101521_totalRNA_counts.csv.gz", header = T, sep = ',', stringsAsFactors = FALSE, 
+                           check.names = FALSE)
+colnames(counts_MDD1)[names(counts_MDD1) == ""] <- "GeneID"
+counts_MDD1 <- as_tibble(counts_MDD1)
+#head(counts_MDD1)
+dim(counts_MDD1)
+```
+
+```{r}
+anno_MDD1 <- read.table("SraRunTable_GSE101521.txt", header = T, sep = ',', stringsAsFactors = FALSE, check.names = 
+                          FALSE)
+anno_MDD1 <- as_tibble(anno_MDD1)
+anno_MDD1 <- anno_MDD1 %>% 
+  add_column(Sample = c("V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "V9", "V10", "V11", "V12", "V13", "V14", "V15",
+                        "V16", "V17", "V18", "V19", "V20", "V21", "V22", "V23", "V24", "V25", "V26", "V27", "V28",
+                        "V29", "V30", "V31", "V32", "V33", "V34", "V35", "V36", "V37", "V38", "V39", "V40", "V41",
+                        "V42", "V43", "V44", "V45", "V46", "V47", "V48", "V49", "V50", "V51", "V52", "V53", "V54",
+                        "V55", "V56", "V57", "V58", "V59"))
+#head(anno_MDD1)
+```
+
+Metadata: keep Diagnosis, sex, Sample
+
+```{r}
+anno_MDD1 %>%
+  group_by(sex) %>%
+  summarise(n())
+anno_MDD1 %>%
+  group_by(Diagnosis) %>%
+  summarise(n())
+```
+
+GSE80655
+```{r}
+counts_MDD2 <- read.table("GSE80655_GeneExpressionData_Updated_3-26-2018.txt.gz", header = T, sep = '\t', 
+                               stringsAsFactors = FALSE, check.names = FALSE)
+dim(counts_MDD2)
+#tail(counts_MDD2)
+colnames(counts_MDD2)[names(counts_MDD2) == "gene_id"] <- "GeneID"
+counts_MDD2 <- counts_MDD2 %>% dplyr::select(GeneID, SL32230, SL32231, SL32242, SL32243, SL32244, SL32245, SL32246, 
+                                             SL32247, SL32248, SL32249, SL5886, SL5997, SL5998, SL5999, SL6000, SL6128, 
+                                             SL6129, SL6130, SL6340, SL6341, SL6412, SL6413, SL6609, SL6612, SL6643, 
+                                             SL6645, SL6666, SL6668, SL6669, SL7141, SL7152, SL7154, SL7155, SL7381, 
+                                             SL7383, SL7384, SL7393, SL7403, SL7404, SL7614, SL7625, SL7632, SL7698, 
+                                             SL7801, SL7804, SL7806, SL7807)
+counts_MDD2 <- counts_MDD2 %>% arrange(GeneID)
+#head(counts_MDD2)
+```
+
+```{r}
+anno_MDD2 <- read.table("SraRunTable_GSE80655.txt", header = T, sep = ',', stringsAsFactors = FALSE, check.names = 
+                          FALSE)
+colnames(anno_MDD2)[names(anno_MDD2) == "clinical_diagnosis"] <- "Diagnosis"
+#head(anno_MDD2)
+anno_MDD2 <- anno_MDD2 %>% dplyr::slice(-2, -4,-6, -8, -10, -12, -14, -16, -18, -20, -29, -31, -58, -60)
+dim(anno_MDD2)
+anno_MDD2 <- anno_MDD2 %>% add_column(Sample = c("SL32230", "SL32231", "SL32242", "SL32243", "SL32244", "SL32245", 
+                                                 "SL32246", "SL32247", "SL32248", "SL32249", "SL5886", "SL5997", 
+                                                 "SL5998", "SL5999", "SL6000", "SL6128", "SL6129", "SL6130", "SL6340", 
+                                                 "SL6341", "SL6412", "SL6413", "SL6609", "SL6612", "SL6643", "SL6645", 
+                                                 "SL6666", "SL6668", "SL6669", "SL7141", "SL7152", "SL7154", "SL7155", 
+                                                 "SL7381", "SL7383", "SL7384", "SL7393", "SL7403", "SL7404", "SL7614", 
+                                                 "SL7625", "SL7632", "SL7698", "SL7801", "SL7804", "SL7806", "SL7807"))
+#tail(anno_MDD2)
+```
+
+Keep metadata: Diagnosis, ETHNICITY, gender, Sample
+
+```{r}
+anno_MDD2 %>%
+  group_by(Diagnosis) %>%
+  summarise(n())
+anno_MDD2 %>%
+  group_by(gender) %>%
+  summarise(n())
+anno_MDD2 %>%
+  group_by(ETHNICITY) %>%
+  summarise(n())
+```
+
+Keeping ethnicity won't really give extra information because there are only 3 non-white people.
+
+## Merging datasets and batch correction
+ALzheimer 
+```{r}
+#head(counts_AD)
+counts_AD$GeneID <- gsub('\\..+$', '', counts_AD$GeneID)
+counts_AD[duplicated(counts_AD)]
+```
+
+Depression
+```{r}
+#head(counts_MDD1)
+#head(counts_MDD2)
+counts_MDD <- inner_join(counts_MDD1, counts_MDD2, by = "GeneID")
+#head(counts_MDD)
+dim(counts_MDD)
+```
+
+Annotation datasets
+```{r}
+anno_AD <- anno_AD %>% dplyr::select(Sample, Diagnosis, Sex, everything())
+anno_AD <- anno_AD %>% mutate(Sex = case_when(Sex == "M" ~ "male", T ~ "female"))
+#head(anno_AD)
+anno_MDD1 <- anno_MDD1 %>% dplyr::select(Sample, Diagnosis, sex, everything())
+colnames(anno_MDD1)[names(anno_MDD1) == "sex"] <- "Sex"
+#head(anno_MDD1)
+anno_MDD2 <- anno_MDD2 %>% dplyr::select(Sample, Diagnosis, gender, everything())
+colnames(anno_MDD2)[names(anno_MDD2) == "gender"] <- "Sex"
+#head(anno_MDD2)
+anno_MDD2 %>%
+  group_by(`SRA Study`) %>%
+  summarise(n())
+```
+
+```{r}
+anno_MDD1 <- anno_MDD1 %>% mutate(Diagnosis = case_when(Diagnosis == "non-psychiatric controls (CON)" ~ "Control", T ~ 
+                                                          Diagnosis))
+anno_MDD1 <- anno_MDD1 %>% dplyr::select(Sample, Diagnosis, Sex, BioProject)
+anno_MDD2 <- anno_MDD2 %>% dplyr::select(Sample, Diagnosis, Sex, BioProject)
+anno_MDD <- rbind(anno_MDD1, anno_MDD2)
+#head(anno_MDD)
+anno_MDD <- anno_MDD %>% mutate(Diagnosis = case_when(Diagnosis == "DSM-IV major depressive disorder suicides (MDD-S)" ~ "Major depression suicide", 
+                                                      Diagnosis == "DSM-IV major depressive disorder non-suicides (MDD)" ~ "Major depression non-suicide", 
+                                                      T ~ Diagnosis))
+anno_MDD %>%
+  group_by(Diagnosis) %>%
+  summarise(n())
+
+anno_AD <- anno_AD %>% dplyr::select(Sample, Diagnosis, Sex, Neuropath.Dx.1, Tangle.Stage, Plaque.Stage)
+#head(anno_AD)
+anno_AD %>%
+  group_by(Neuropath.Dx.1) %>%
+  summarise(n())
+```
+
+
+# Preprocessing
+## Normalization and logarithmic transformation with EdgeR
+```{r}
+preprocess <- function(C, A) {
+groupExp = factor(A$Diagnosis[A$Sample %in% names(C)])
+CC <- as.matrix(C[,-1])
+rownames(CC) <- C$GeneID
+y <- DGEList(counts = CC, group = groupExp)
+y_ori <- y
+keep <- rowSums(cpm(y) > 1) >= 5 #more than 1 count in at least 5 samples
+y <- y[keep, , keep.lib.sizes=FALSE]
+y <- calcNormFactors(y) #TMM normalization for lib sizes
+
+name_plot = deparse(substitute(C)) #from variable to variable name as a string
+name_1 = paste0('mds_',name_plot, '.png')
+png(filename = name_1)
+plotMDS(y, col = c("blue", "red", "green")[groupExp]) 
+dev.off()
+
+logcpm <- cpm(y, log = T, prior.count = 1)
+logcpmS <- as_tibble(rownames_to_column(as.data.frame(logcpm), "GeneID"))
+
+name_2 = paste0('boxplot_',name_plot, '.png')
+png(filename = name_2)
+boxplot(logcpm, main = "Filtered_Normalized", ylab = "log-cpm", xaxt = "n")
+axis(side = 1, labels = FALSE)
+text(x = 1:length(colnames(logcpm)), y = par("usr")[3]-0.5, labels = colnames(logcpm), srt = 45, adj = 1, xpd = NA, cex 
+     = 0.8)
+dev.off() 
+name_3 = paste0('mds_afterlog_',name_plot, '.png')
+png(filename = name_3)
+plotMDS(logcpm, col = c("blue", "red", "green")[groupExp]) 
+dev.off()
+
+return(logcpmS)
+}
+```
+
+
+```{r}
+procounts_AD_N <- preprocess(counts_AD, anno_AD)
+procounts_MDD_N <- preprocess(counts_MDD, anno_MDD)
+#head(procounts_AD_N)
+#head(procounts_MDD_N)
+```
+
+```{r}
+dim(procounts_AD_N) #no genes gone
+dim(procounts_MDD_N) #33114 genes gone
+```
+
+## Batch correction after normalization
+```{r}
+#head(procounts_MDD_N)
+GeneID <- procounts_MDD_N$GeneID
+procounts_MDD_b <- procounts_MDD_N %>% dplyr::select(-GeneID)
+procounts_MDD_b <- procounts_MDD_b %>% mutate_if(is.integer, as.numeric)
+procounts_MDD_b <- as.matrix(procounts_MDD_b)
+procounts_MDD_N <- removeBatchEffect(procounts_MDD_b, anno_MDD$BioProject, covariates = NULL)
+procounts_MDD_N <- as_tibble(procounts_MDD_N)
+procounts_MDD_N <- procounts_MDD_N %>% add_column(GeneID)
+procounts_MDD_N <- procounts_MDD_N %>% dplyr::select(GeneID, everything())
+#head(procounts_MDD_N)
+```
+
+PCAplot MDD
+```{r}
+pca <- prcomp(procounts_MDD_N[, -1])
+anno_MDD %>%
+  mutate(PC1 = pca$rotation[,1], PC2 = pca$rotation[,2]) %>%
+  ggplot(aes(x = PC1, y = PC2, colour = Diagnosis)) +
+        geom_point() + 
+  geom_text(label = colnames(procounts_MDD_N[, -1]), check_overlap = F)
+```
+
+```{r}
+png(filename = 'mds_afterlog_procounts_MDD.png')
+plotMDS(procounts_MDD_N[, -1], col = c("blue", "red", "green")[factor(anno_MDD$Diagnosis)]) 
+dev.off()
+```
+
+## Removal of outliers
+Transpose datasets
+```{r}
+data_AD_t <- procounts_AD_N %>% 
+    pivot_longer(!c('GeneID'), names_to = 'Samples', values_to = 'logcpm') %>% #names_to: column with all column names (samples) and values_to: all counts from these samples
+    pivot_wider(names_from = c('GeneID'), values_from = 'logcpm') #transposed: samples in rows, genes in columns
+mat_AD <- as.matrix(data_AD_t[,-1])
+rownames(mat_AD) <- data_AD_t$Samples
+
+data_MDD_t <- procounts_MDD_N %>% 
+    pivot_longer(!c('GeneID'), names_to = 'Samples', values_to = 'logcpm') %>% 
+    pivot_wider(names_from = c('GeneID'), values_from = 'logcpm')
+mat_MDD <- as.matrix(data_MDD_t[,-1])
+rownames(mat_MDD) <- data_MDD_t$Samples
+```
+
+```{r}
+hclust_AD <- hclust(dist(mat_AD[, -1]), method = "average")
+plot(hclust_AD, main = "Cluster dendogram AD", xlab = "", sub = "", cex = 0.7)
+```
+
+I am not sure whether there are outliers. The six/seven samples at the left could be. Sample18, 96, 27, 87, 41, 9
+
+```{r}
+hclust_MDD <- hclust(dist(mat_MDD[, -1]), method = "average")
+plot(hclust_MDD, main = "Cluster dendogram MDD", xlab = "", sub = "", cex = 0.7)
+```
+
+V10 is a clear outlier.
+
+```{r}
+procounts_MDD_N <- procounts_MDD_N %>% dplyr::select(-V10)
+anno_MDD <- anno_MDD %>% dplyr::slice(-10)
+#head(anno_MDD, 10)
+```
+
+I will do PCA of the AD dataset to see whether I will delete these samples. 
+```{r}
+pca <- prcomp(procounts_AD_N[, -1])
+anno_AD %>%
+  mutate(PC1 = pca$rotation[,1], PC2 = pca$rotation[,2]) %>%
+  ggplot(aes(x = PC1, y = PC2, colour = Diagnosis)) +
+        geom_point() + 
+  geom_text(label = colnames(procounts_AD_N[, -1]), check_overlap = F)
+```
+
+Here as well samples 9, 18, 27, 41, 87 and 96 form a distinct cluster in the PCA plot. 
+This is the case as well in the MDS plot. 
+
+```{r}
+procounts_AD_N <- procounts_AD_N %>% dplyr::select(-c("Sample-9", "Sample-18", "Sample-27", "Sample-41", "Sample-87", 
+                                                      "Sample-96"))
+#head(procounts_AD_N)
+anno_AD <- anno_AD %>% dplyr::slice(-c(11, 21, 35, 82, 85, 92))
+```
+
+Save annotation files 
+```{r}
+write.table(anno_MDD, file = "annotation_MDD.txt", sep = "\t", col.names = T, row.names = F, quote = F)
+write.table(anno_AD, file = "annotation_AD.txt", sep = "\t", col.names = T, row.names = F, quote = F)
+```
+
+## Selection of highly variable genes 
+```{r}
+#remove the geneId column 
+procounts_AD_E <- as.data.frame(procounts_AD_N, row.names = GeneID)
+procounts_MDD_E <- as.data.frame(procounts_MDD_N, row.names = GeneID)
+
+# apply() takes Data frame or matrix as an input and gives output in vector, list or array.
+# var, calcualte rowwise variance
+vars_AD <- apply(procounts_AD_E[, -1], 1, var) #1 is rows, 2 columns
+vars_MDD <- apply(procounts_MDD_E[, -1], 1, var)
+
+# create histogram
+hist_AD <- hist(vars_AD, 200, plot = F)
+hist_MDD <- hist(vars_MDD, 500, plot = F)
+```
+
+Plot histogram and draw lines
+```{r}
+png(filename = "Histogram_highlyvariable_AD.png")
+plot(hist_AD,
+     col = 'gold',
+     xlim = c(0,2),
+     main = "Histogram of vars (500 breaks)",
+     ylim = c(0,3500))+
+  abline(v = c(0.20, 1, 0.45, 0.5, 1.75), col = c("red", "orange", "darkblue", "green", "pink"), lty = 2, lwd = 3)
+dev.off()
+```
+
+0.1 seems good. 
+
+```{r}
+png(filename = "Histogram_highlyvariable_MDD.png")
+plot(hist_MDD,
+     col = 'gold',
+     xlim = c(0,3),
+     main = "Histogram of vars (500 breaks)",
+     ylim = c(0,5000))+
+  abline(v = c(0.20, 1, 0.45, 0.5, 1.75), col = c("red", "orange", "darkblue", "green", "pink"), lty = 2, lwd = 3)
+dev.off()
+```
+
+0.2 seems good.
+
+```{r}
+names(vars_AD) <- procounts_AD_E$GeneID
+length(names(vars_AD[vars_AD >= 0.1])) #13970 genes -> 4896 gone 
+length(names(vars_AD[vars_AD >= 0.2])) #8596 
+length(names(vars_AD[vars_AD >= 0.5])) #1714
+names(vars_MDD) <- procounts_MDD_N$GeneID
+length(names(vars_MDD[vars_MDD >= 0.2])) #11012 -> 11458 gone
+length(names(vars_MDD[vars_MDD >= 0.1])) #15911
+```
+
+```{r}
+print("Number of features remaing after variance filter:")
+print("AD dataset:")
+names_AD <- names(vars_AD[vars_AD >= 0.1])
+procounts_AD <- procounts_AD_N %>%
+    dplyr::filter(GeneID %in% names_AD)
+dim(procounts_AD)
+print("MDD dataset:")
+names_MDD <- names(vars_MDD[vars_MDD >= 0.1])
+procounts_MDD <- procounts_MDD_N %>%
+    dplyr::filter(GeneID %in% names_MDD)
+dim(procounts_MDD)
+```
+
+## From GeneID to GeneSymbol
+```{r}
+#BiocManager::install("EnsDb.Hsapiens.v79")
+library(EnsDb.Hsapiens.v79)
+ensembl.genes <- procounts_AD$GeneID
+geneIDs1 <- ensembldb::select(EnsDb.Hsapiens.v79, keys = ensembl.genes, keytype = "GENEID", columns = 
+                                c("SYMBOL","GENEID"))
+head(geneIDs1)
+dim(geneIDs1)
+geneIDs1 <- geneIDs1 %>% mutate(SYMBOL = case_when(SYMBOL == "" ~ GENEID, T ~ SYMBOL))
+#tail(geneIDs1)
+
+colnames(geneIDs1)[names(geneIDs1) == "GENEID"] <- "GeneID"
+procounts_AD <- left_join(geneIDs1, procounts_AD, by = "GeneID")
+procounts_AD <- procounts_AD %>% dplyr::select(GeneID, SYMBOL, everything())
+colnames(procounts_AD)[names(procounts_AD) == "SYMBOL"] <- "GeneSymbol"
+#head(procounts_AD)
+dim(procounts_AD)
+```
+
+Protein-coding genes only
+```{r}
+mart <- useMart(biomart = "ENSEMBL_MART_ENSEMBL", dataset = "hsapiens_gene_ensembl", host = 'www.ensembl.org')
+genes_ENSID <- biomaRt::getBM(attributes = c("external_gene_name", "ensembl_gene_id", "chromosome_name", 
+                                             "transcript_biotype"), filters = c("transcript_biotype", 
+                                                                                "chromosome_name"), values = 
+                                list("protein_coding", c(1:22)), mart = mart)
+procounts_AD <- procounts_AD %>%
+  dplyr::filter(GeneID %in% genes_ENSID$ensembl_gene_id)
+dim(procounts_AD) #4760 genes gone 
+```
+
+```{r}
+procounts_AD$GeneSymbol[duplicated(procounts_AD$GeneSymbol)]
+procounts_AD %>% dplyr::filter(GeneSymbol == "CBS")
+procounts_AD <- procounts_AD %>% mutate(GeneSymbol = case_when(GeneID == "ENSG00000274276" ~ "CBSL", T ~ GeneSymbol))
+procounts_AD %>% dplyr::filter(GeneSymbol == "ZNF709")
+procounts_AD <- procounts_AD %>% mutate(GeneSymbol = case_when(GeneID == "ENSG00000196826" ~ "ENSG00000196826", T ~ GeneSymbol))
+procounts_AD %>% dplyr::filter(GeneSymbol == "FAM47E-STBD1")
+procounts_AD <- procounts_AD %>% mutate(GeneSymbol = case_when(GeneID == "ENSG00000118804" ~ "STBD1", T ~ GeneSymbol))
+procounts_AD %>% dplyr::filter(GeneSymbol == "SMIM11")
+procounts_AD <- procounts_AD %>% mutate(GeneSymbol = case_when(GeneID == "ENSG00000205670" ~ "SMIM11A", GeneID == "ENSG00000273590" ~ "SMIM11B", T ~ GeneSymbol))
+procounts_AD %>% dplyr::filter(GeneSymbol == "TAF9")
+procounts_AD <- procounts_AD %>% mutate(GeneSymbol = case_when(GeneID == "ENSG00000085231" ~ "AK6", T ~ GeneSymbol))
+procounts_AD %>% dplyr::filter(GeneSymbol == "U2AF1")
+procounts_AD <- procounts_AD %>% mutate(GeneSymbol = case_when(GeneID == "ENSG00000275895" ~ "U2AF1L5", T ~ GeneSymbol))
+procounts_AD %>% dplyr::filter(GeneSymbol == "ICOSLG")
+procounts_AD <- procounts_AD %>% mutate(GeneSymbol = case_when(GeneID == "ENSG00000277117" ~ "ENSG00000277117", T ~ GeneSymbol))
+procounts_AD %>% dplyr::filter(GeneSymbol == "SYT15")
+procounts_AD <- procounts_AD %>% mutate(GeneSymbol = case_when(GeneID == "ENSG00000277758" ~ "ENSG00000277758", T ~ GeneSymbol))
+```
+
+```{r}
+ensembl.genes <- procounts_MDD$GeneID
+geneIDs1 <- ensembldb::select(EnsDb.Hsapiens.v79, keys = ensembl.genes, keytype = "GENEID", columns = 
+                                c("SYMBOL","GENEID"))
+#head(geneIDs1)
+dim(geneIDs1)
+geneIDs1 <- geneIDs1 %>% mutate(SYMBOL = case_when(SYMBOL == "" ~ GENEID, T ~ SYMBOL))
+
+colnames(geneIDs1)[names(geneIDs1) == "GENEID"] <- "GeneID"
+procounts_MDD <- left_join(geneIDs1, procounts_MDD, by = "GeneID")
+procounts_MDD <- procounts_MDD %>% dplyr::select(GeneID, SYMBOL, everything())
+colnames(procounts_MDD)[names(procounts_MDD) == "SYMBOL"] <- "GeneSymbol"
+#head(procounts_MDD)
+dim(procounts_MDD)
+```
+
+```{r}
+procounts_MDD <- procounts_MDD %>%
+  dplyr::filter(GeneID %in% genes_ENSID$ensembl_gene_id)
+dim(procounts_MDD) #7251 genes gone 
+```
+
+## Add regulators again
+```{r}
+regulators <- read.table("dbTF.csv", header = T)
+#head(regulators)
+dim(regulators)
+#regulators[duplicated(regulators)]
+```
+
+Alzheimer
+Add GeneSymbol
+```{r}
+ensembl.genes <- procounts_AD_N$GeneID
+geneIDs1 <- ensembldb::select(EnsDb.Hsapiens.v79, keys = ensembl.genes, keytype = "GENEID", columns = 
+                                c("SYMBOL","GENEID"))
+#head(geneIDs1)
+geneIDs1 <- geneIDs1 %>% mutate(SYMBOL = case_when(SYMBOL == "" ~ GENEID, T ~ SYMBOL))
+colnames(geneIDs1)[names(geneIDs1) == "GENEID"] <- "GeneID"
+procounts_AD_N <- left_join(geneIDs1, procounts_AD_N, by = "GeneID")
+procounts_AD_N <- procounts_AD_N %>% dplyr::select(GeneID, SYMBOL, everything())
+colnames(procounts_AD_N)[names(procounts_AD_N) == "SYMBOL"] <- "GeneSymbol"
+#head(procounts_AD_N)
+dim(procounts_AD_N)
+#procounts_AD_N$GeneSymbol[duplicated(procounts_AD_N$GeneSymbol)]
+```
+
+```{r}
+#head(procounts_AD)
+# find TF of regulators in procounts_AD_N
+# add these to procounts_AD, but no duplicates
+regulators_AD <- procounts_AD_N %>% dplyr::filter(GeneSymbol %in% regulators$Gene_symbol)
+#head(regulators_AD)
+dim(regulators_AD) #1045
+regulators_AD$GeneSymbol[duplicated(regulators_AD$GeneSymbol)]
+regulators_AD %>% dplyr::filter(GeneSymbol == "ZNF709")
+regulators_AD <- regulators_AD[!(regulators_AD$GeneID == "ENSG00000196826"),]
+regulators_AD %>% dplyr::filter(GeneSymbol == "ZNF286A")
+regulators_AD <- regulators_AD[!(regulators_AD$GeneID == "ENSG00000255104"),]
+regulators_AD %>% dplyr::filter(GeneSymbol == "ZNF670")
+"ZNF670-ZNF695" %in% regulators
+regulators_AD <- regulators_AD[!(regulators_AD$GeneID == "ENSG00000135747"),]
+regulators_AD %>% dplyr::filter(GeneSymbol == "SP110")
+regulators_AD <- regulators_AD[!(regulators_AD$GeneID == "ENSG00000280755"),]
+dim(procounts_AD) #9210
+procounts_AD_ <- full_join(procounts_AD, regulators_AD)
+procounts_AD_$GeneSymbol[duplicated(procounts_AD_$GeneSymbol)]
+#head(procounts_AD_)
+dim(procounts_AD_) #9727 -> 517 extra
+```
+
+Depression
+```{r}
+ensembl.genes <- procounts_MDD_N$GeneID
+geneIDs1 <- ensembldb::select(EnsDb.Hsapiens.v79, keys = ensembl.genes, keytype = "GENEID", columns = 
+                                c("SYMBOL","GENEID"))
+geneIDs1 <- geneIDs1 %>% mutate(SYMBOL = case_when(SYMBOL == "" ~ GENEID, T ~ SYMBOL))
+
+colnames(geneIDs1)[names(geneIDs1) == "GENEID"] <- "GeneID"
+procounts_MDD_N <- left_join(geneIDs1, procounts_MDD_N, by = "GeneID")
+procounts_MDD_N <- procounts_MDD_N %>% dplyr::select(GeneID, SYMBOL, everything())
+colnames(procounts_MDD_N)[names(procounts_MDD_N) == "SYMBOL"] <- "GeneSymbol"
+#head(procounts_MDD_N)
+```
+
+```{r}
+regulators_MDD <- procounts_MDD_N %>% dplyr::filter(GeneSymbol %in% regulators$Gene_symbol)
+#head(regulators_MDD)
+dim(regulators_MDD) #1101
+dim(procounts_MDD) #8660
+procounts_MDD_ <- full_join(procounts_MDD, regulators_MDD)
+#head(procounts_MDD_)
+dim(procounts_MDD_) #9217 -> 557 extra
+```
+
+
+## Scaling
+```{r}
+Genes_AD <- procounts_AD_ %>% dplyr::select(GeneID, GeneSymbol)
+Genes_MDD <- procounts_MDD_ %>% dplyr::select(GeneID, GeneSymbol)
+procounts_AD_S <- t(scale(t(procounts_AD_[, c(-1, -2)])))
+procounts_AD_S <- cbind(procounts_AD_S, Genes_AD)
+procounts_AD_S <- procounts_AD_S %>% dplyr::select(GeneID, GeneSymbol, everything())
+
+procounts_AD_S <- as.data.frame(procounts_AD_S)
+procounts_MDD_S <- t(scale(t(procounts_MDD_[, c(-1, -2)])))
+procounts_MDD_S <- cbind(procounts_MDD_S, Genes_MDD)
+procounts_MDD_S <- procounts_MDD_S %>% dplyr::select(GeneID, GeneSymbol, everything())
+procounts_MDD_S <- as.data.frame(procounts_MDD_S)
+```
+
+Files of processed counts 
+```{r}
+#procounts_AD_S <- procounts_AD_S %>% dplyr::select(-GeneID)
+#procounts_MDD_S <- procounts_MDD_S %>% dplyr::select(-GeneID)
+write.table(procounts_AD_S, file = "Processed_counts_AD.csv", sep = '\t', row.names = F, col.names = T)
+write.table(procounts_MDD_S, file = "Processed_counts_MDD.csv", sep = '\t', row.names = F, col.names = T)
+```
+
+Write files for Lemon-tree
+```{r}
+#head(procounts_AD_S)
+write.table(procounts_AD_S, file = "Processed_counts_AD.txt", sep = '\t', row.names = F, col.names = T)
+write.table(procounts_MDD_S, file = "Processed_counts_MDD.txt", sep = '\t', row.names = F, col.names = T)
+```
+
+Regulators
+```{r}
+regulators_AD <- regulators_AD$GeneSymbol
+regulators_MDD <- regulators_MDD$GeneSymbol
+regulators_AD <- as.vector(regulators_AD)
+regulators_MDD <- as.vector(regulators_MDD)
+head(regulators_AD)
+write.table(regulators_AD, file = "RegulatorsAD.txt", sep = ',', col.names = F, row.names = F)
+write.table(regulators_MDD, file = "RegulatorsMDD.txt", sep = ',', col.names = F, row.names = F)
+```
+
+Gene names
+```{r}
+procounts_AD_G <- procounts_AD_S$GeneSymbol
+class(procounts_AD_G)
+procounts_MDD_G <- procounts_MDD_S$GeneSymbol
+head(procounts_MDD_G)
+write.table(procounts_AD_G, file = "GeneNamesAD.txt", sep = ',', col.names = F, row.names = F)
+write.table(procounts_MDD_G, file = "GeneNamesMDD.txt", sep = ',', col.names = F, row.names = F)
+```
+
+#ModuleViewer
+AD
+```{r}
+modulesAD <- read.table("Lemon-Tree/tight_clustersAD.txt")
+dim(modulesAD) #8674
+#head(procounts_AD_)
+dim(procounts_AD_) #9724
+procounts_AD_G <- procounts_AD_ %>% dplyr::select(GeneID, GeneSymbol)
+procounts_AD_T <- procounts_AD_G %>% dplyr::filter(GeneSymbol %in% modulesAD$V1)
+dim(procounts_AD_T) #8246
+colnames(modulesAD)[names(modulesAD) == "V1"] <- "GeneSymbol"
+modulesAD <- full_join(modulesAD, procounts_AD_T, by = "GeneSymbol")
+modulesAD <- modulesAD %>% dplyr::select(GeneSymbol, GeneID, V2)
+head(modulesAD)
+modulesAD <- modulesAD %>% dplyr::select(GeneID, V2)
+write.table(modulesAD, file = "ModulesAD.txt", sep = '\t', col.names = F, row.names = F)
+```
+MDD
+```{r}
+modulesMDD <- read.table("Lemon-Tree/tight_clustersMDD.txt")
+dim(modulesMDD) #8674
+#head(procounts_MDD_)
+dim(procounts_MDD_) #9724
+procounts_MDD_G <- procounts_MDD_ %>% dplyr::select(GeneID, GeneSymbol)
+procounts_MDD_T <- procounts_MDD_G %>% dplyr::filter(GeneSymbol %in% modulesMDD$V1)
+dim(procounts_MDD_T) #8246
+colnames(modulesMDD)[names(modulesMDD) == "V1"] <- "GeneSymbol"
+modulesMDD <- full_join(modulesMDD, procounts_MDD_T, by = "GeneSymbol")
+modulesMDD <- modulesMDD %>% dplyr::select(GeneSymbol, GeneID, V2)
+head(modulesMDD)
+modulesMDD <- modulesMDD %>% dplyr::select(GeneID, V2)
+write.table(modulesMDD, file = "ModulesMDD.txt", sep = '\t', col.names = F, row.names = F)
+```
+
+With GeneID
+```{r}
+write.table(procounts_AD_S, file = "Processed_counts_AD.txt", sep = '\t', row.names = F, col.names = T, quote = F)
+write.table(procounts_MDD_S, file = "Processed_counts_MDD.txt", sep = '\t', row.names = F, col.names = T, quote = F)
+```
+
+Name mapping for ModuleViewer
+```{r}
+procounts_AD_G <- procounts_AD_S %>% dplyr::select(GeneID, GeneSymbol)
+head(procounts_AD_G)
+procounts_MDD_G <- procounts_MDD_S %>% dplyr::select(GeneID, GeneSymbol)
+write.table(procounts_AD_G, file = "NameMappingAD.txt", sep = '\t', col.names = F, row.names = F, quote = F)
+write.table(procounts_MDD_G, file = "NameMappingMDD.txt", sep = '\t', col.names = F, row.names = F, quote = F)
+```
+
