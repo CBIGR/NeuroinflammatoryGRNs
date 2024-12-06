@@ -1,0 +1,103 @@
+---
+title: "RSS plots customization"
+author: "Hanne Puype"
+date: "2022-12-20"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# RSS dataframe 
+```{r}
+RSS_AD <- read.csv("RSS_AD.csv", row.names=NULL)
+RSS_MDD <- read.csv("RSS_MDD.csv", row.names=NULL)
+RSS_AD$row.names <- sub('\\-[^-]*$', '', RSS_AD$row.names) # Delete motif from name regulons 
+RSS_MDD$row.names <- sub('\\-[^-]*$', '', RSS_MDD$row.names)
+RSS_AD$row.names <- sub("\\_", "", RSS_AD$row.names)
+RSS_MDD$row.names <- sub("\\_", "", RSS_MDD$row.names)
+tail(RSS_AD)
+library(tidyverse)
+library(cowplot)
+RSS_AD <- data.frame(RSS_AD, row.names = 1)
+RSS_MDD <- data.frame(RSS_MDD, row.names = 1)
+```
+
+# Function for plots 
+from Vittorio  
+I added column_nr and plot_title  
+problem: for the names, the dataframe needed to be arrange first before selecting  
+but the arrange function does not work with "", which resulted in not arranging  
+So I will now change the column name for every new figure 
+```{r}
+plotRSS_oneSet <- function(rss, column_nr, plot_title, n=5)
+{
+  library(ggplot2)
+  library(ggrepel)
+  
+  rss <- rss %>% arrange(desc(END)) # added this  !adapt for cell type!
+  rssThisType <- sort(rss[,column_nr], decreasing=TRUE)
+  names(rssThisType) = rownames(rss) # added this
+  thisRss <- data.frame(regulon=names(rssThisType), rank=seq_along(rssThisType), rss=rssThisType)
+  thisRss$regulon[(n+1):nrow(thisRss)] <- NA
+  
+  p <- ggplot(thisRss, aes(x=rank, y=rss)) + 
+    geom_point(color = "blue", size = 1.5) + 
+    ggtitle(plot_title) + 
+    geom_label_repel(aes(label = regulon),
+                     box.padding   = 0.25, 
+                     point.padding = 0.5,
+                     label.size = 0.1,
+                     label.padding = 0.1,
+                     segment.color = 'grey50',
+                     na.rm=TRUE,
+                     size = 5,
+                     alpha = 0.8, 
+                     colour = "black",
+                     max.overlaps = Inf) +
+    theme_classic()
+  p + theme(text=element_text(size=25)) 
+}
+```
+
+# Plots 
+AD 
+```{r}
+plotRSS_oneSet(RSS_AD, column_nr = 1, plot_title = "Oligodendrocytes", n = 15)
+ggsave(filename = "oligos_AD.pdf", device = "pdf", height = 9, width = 5)
+plotRSS_oneSet(RSS_AD, column_nr = 2, plot_title = "Microglia", n = 15)
+ggsave(filename = "Micros_AD.pdf", device = "pdf", height = 9, width = 5)
+plotRSS_oneSet(RSS_AD, column_nr = 3, plot_title = "Oligodendrocyte \n precursors", n = 15)
+ggsave(filename = "OPCs_AD.pdf", device = "pdf", height = 9, width = 5)
+plotRSS_oneSet(RSS_AD, column_nr = 4, plot_title = "Inhibitory neurons", n = 15)
+ggsave(filename = "INH_AD.pdf", device = "pdf", height = 9, width = 5)
+plotRSS_oneSet(RSS_AD, column_nr = 5, plot_title = "Excitatory neurons", n = 15)
+ggsave(filename = "EX_AD.pdf", device = "pdf", height = 9, width = 5)
+plotRSS_oneSet(RSS_AD, column_nr = 6, plot_title = "Astrocytes", n = 15)
+ggsave(filename = "Astros_AD.pdf", device = "pdf", height = 9, width = 5)
+plotRSS_oneSet(RSS_AD, column_nr = 7, plot_title = "Pericytes - \nendothelial cells", n = 15)
+ggsave(filename = "PER_END_AD.pdf", device = "pdf", height = 9, width = 5)
+```
+
+MDD
+```{r}
+plotRSS_oneSet(RSS_MDD, column_nr = 1, plot_title = "Excitatory neurons", n = 15)
+ggsave(filename = "EX_MDD.pdf", device = "pdf", height = 9, width = 5)
+plotRSS_oneSet(RSS_MDD, column_nr = 2, plot_title = "Inhibitory neurons", n = 15)
+ggsave(filename = "INH_MDD.pdf", device = "pdf", height = 9, width = 5)
+plotRSS_oneSet(RSS_MDD, column_nr = 4, plot_title = "Oligodendrocytes", n = 15)
+ggsave(filename = "oligos_MDD.pdf", device = "pdf", height = 9, width = 5)
+plotRSS_oneSet(RSS_MDD, column_nr = 6, plot_title = "Microglia", n = 15)
+ggsave(filename = "Micros_MDD.pdf", device = "pdf", height = 9, width = 5)
+plotRSS_oneSet(RSS_MDD, column_nr = 7, plot_title = "Oligodendrocyte \n precursors", n = 15)
+ggsave(filename = "OPCs_MDD.pdf", device = "pdf", height = 9, width = 5)
+plotRSS_oneSet(RSS_MDD, column_nr = 5, plot_title = "Astrocytes", n = 15)
+ggsave(filename = "Astros_MDD.pdf", device = "pdf", height = 9, width = 5)
+plotRSS_oneSet(RSS_MDD, column_nr = 8, plot_title = "Endothelial cells", n = 15)
+ggsave(filename = "Endo_MDD.pdf", device = "pdf", height = 9, width = 5)
+```
+

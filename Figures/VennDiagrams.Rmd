@@ -1,0 +1,173 @@
+---
+title: "Venn Diagrams paper"
+author: "Hanne Puype"
+date: "2022-11-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Load package
+```{r}
+library(VennDiagram)
+```
+
+# Venn diagrams three methods
+
+## Regulators 
+### AD
+```{r fig.width=9, fig.height=8}
+grid.newpage()
+pdf("regAD.pdf", 
+    width = 9, height = 8, 
+    family = "ArialMT")
+draw.triple.venn(area1 = 100, # GENIE3                   
+                 area2 = 100, #CLR
+                 area3 = 100, #LT
+                 n12 = 60,   # GENIE3-CLR
+                 n23 = 49,   # CLR-LT
+                 n13 = 66,   #GENIE3-LT
+                 n123 = 45, 
+                 fill = c('#99DDFF', '#EEDD88', '#44BB99'), category = c("GENIE3", "CLR",
+                                                                         "Lemon-Tree"), 
+                 lty = "blank", cat.cex = 3.2, cex = 3.5)
+dev.off()
+```
+
+### MDD
+```{r fig.width=9, fig.height=8}
+grid.newpage()
+pdf("reg_MDD.pdf", 
+    width = 9, height = 8, 
+    family = "ArialMT")
+draw.triple.venn(area1 = 100, # GENIE3                   
+                 area2 = 100, #CLR
+                 area3 = 100, #LT
+                 n12 = 70,   # GENIE3-CLR
+                 n23 = 45,   # CLR-LT
+                 n13 = 54,   #GENIE3-LT
+                 n123 = 40, 
+                 fill = c('#99DDFF', '#EEDD88', '#44BB99'), category = c("GENIE3", "CLR",
+                                                                         "Lemon-Tree"), 
+                 lty = "blank", cat.cex = 3.2, cex = 3.5)
+dev.off()
+```
+
+# Consensus networks
+
+```{r fig.width=8, fig.height=8}
+grid.newpage()    
+pdf("consensus.pdf", 
+    width = 9, height = 8, 
+    family = "ArialMT")
+draw.pairwise.venn(area1 = 100000,                        
+                   area2 = 100000,
+                   cross.area = 10500, 
+                   fill = c('#99DDFF', '#44BB99'), category = c("AD", "MDD"), 
+                   lty = "blank", cat.cex = 3, cex = 2.8, cat.pos = 1)
+dev.off()
+```
+
+## Single-cell
+### AD
+```{r fig.width=9, fig.height=9}
+grid.newpage()    
+pdf("bulk_sc_AD.pdf", 
+    width = 9, height = 9, 
+    family = "ArialMT")
+draw.pairwise.venn(area1 = 100000,                        
+                   area2 = 37070,
+                   cross.area = 1866, 
+                   fill = c('#99DDFF', '#44BB99'), category = c("bulk", "single-cell"), 
+                   lty = "blank", cat.cex = 4, cex = 4, cat.pos = 1)  
+dev.off()
+```
+
+### MDD
+```{r fig.width=9, fig.height=9}
+grid.newpage()      
+pdf("bulk_sc_MDD.pdf", 
+    width = 9, height = 9, 
+    family = "ArialMT")
+draw.pairwise.venn(area1 = 100000,                        
+                   area2 = 22544,
+                   cross.area = 1849, 
+                   fill = c('#99DDFF', '#44BB99'), category = c("bulk", "single-cell"), 
+                   lty = "blank", cat.cex = 4, cex = 4, cat.pos = 1)
+dev.off()
+```
+
+### Both single-cell networks
+```{r fig.width=8, fig.height=8}
+grid.newpage()
+pdf("single-cell.pdf", 
+    width = 8, height = 8, 
+    family = "ArialMT")
+draw.pairwise.venn(area1 = 37070,                        
+                   area2 = 22544,
+                   cross.area = 3663, 
+                   fill = c('#99DDFF', '#44BB99'), category = c("AD", "MDD"), 
+                   lty = "blank", cat.cex = 2.8, cex = 2.8, cat.pos = 1)
+dev.off()
+```
+
+# Ground truth networks
+
+## Three methods and all ground truths 
+### AD
+```{r fig.width=10, fig.height=8}
+grid.newpage()
+pdf("ground_truth_all_AD.pdf", 
+    width = 10, height = 8, 
+    family = "ArialMT")
+draw.quad.venn(area1 = 100000,
+               area4 = 100000,
+               area3 = 100000,
+               area2 = 1878921,
+               n14 = 23161, #G3 - CLR
+               n13 = 27626, # G3 - LT
+               n12 = 22162, # G3 - GT
+               n34 = 11340, # CLR - LT
+               n24 = 19987, # CLR - GT
+               n23 = 18187,  # LT - GT
+               n134 = 8888, 
+               n124 = 5201, # G3-CLR-GT
+               n123 = 4931, # G3-LT-GT
+               n234 = 2140, # CLR-LT-GT
+               n1234 = 1643,
+               fill = c('#99DDFF', '#FFAABB', '#EEDD88', '#44BB99'), 
+               category = c("  GENIE3", "Ground \n truth \n", "Lemon-Tree", "CLR"), 
+               lwd = 1, cat.cex = 3, cex = 3)
+dev.off()
+```
+
+### MDD 
+```{r fig.width=10, fig.height=8}
+grid.newpage()
+pdf("ground_truth_all_MDD.pdf", 
+    width = 10, height = 8, 
+    family = "ArialMT")
+draw.quad.venn(area1 = 100000,
+               area4 = 100000,
+               area3 = 100000,
+               area2 = 1830357,
+               n14 = 38555, #G3 - CLR
+               n13 = 26403, # G3 - LT
+               n12 = 25865, # G3 - GT
+               n34 = 16310, # CLR - LT
+               n24 = 22160, # CLR - GT
+               n23 = 23750,  # LT - GT
+               n134 = 13437, 
+               n124 = 10095, # G3-CLR-GT
+               n123 = 7191, # G3-LT-GT
+               n234 = 4332, # CLR-LT-GT
+               n1234 = 3639,
+               fill = c('#99DDFF', '#FFAABB', '#EEDD88', '#44BB99'), 
+               category = c(" GENIE3", "Ground \n truth \n ", "Lemon-Tree", "CLR"), 
+               lwd = 1, cat.cex = 3, cex = 3)
+dev.off()
+```
+
+

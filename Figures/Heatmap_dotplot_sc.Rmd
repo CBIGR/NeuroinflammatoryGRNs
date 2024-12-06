@@ -1,0 +1,423 @@
+---
+title: "Heatmap dotplot SCENIC"
+author: "Hanne Puype"
+date: "2023-07-24"
+output:   
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Read in data
+```{r}
+library(Seurat)
+library(tidyverse)
+library(SCENIC)
+#install.packages("cellpypes")
+library(cellpypes)
+library(viridis)
+library(scales)
+library(SCopeLoomR)
+library(BBmisc)
+seuratObjAD <- readRDS("~/MyFiles/Master/single-cell/Seurat_AD.rds")
+seuratObjMDD <- readRDS("~/MyFiles/Master/single-cell/Seurat_MDD.rds")
+getwd()
+```
+
+This script is heavily based on https://github.com/aertslab/scenicplus/blob/main/notebooks/pbmc_multiome_tutorial.ipynb, section dotplot-heatmap  
+
+# AD
+
+```{r}
+metaAD <- seuratObjAD@meta.data
+metaAD <- metaAD %>% select(celltype)
+```
+
+## Get AUC scores, RSS and TF expression 
+
+### TF expression
+Pseudobulk per cell type
+https://search.r-project.org/CRAN/refmans/cellpypes/html/pseudobulk.html
+```{r}
+pypeAD <- pype_from_seurat(seuratObjAD)
+metaAD$pseudobulk_id <- pseudobulk_id(metaAD)
+
+pseudoCountsAD <- pseudobulk(pypeAD$raw, metaAD$pseudobulk_id)
+pseudoCountsAD <- as.data.frame(as.matrix(pseudoCountsAD))
+```
+
+### AUC scores
+```{r}
+AUC_AD <- read_csv2("regulonAUC_AD.csv")
+AUC_AD$...1 <- gsub("_.*", "", AUC_AD$...1)
+AUC_AD <- AUC_AD %>% column_to_rownames("...1")
+colnames(AUC_AD) <- gsub("\\.", "-", colnames(AUC_AD))
+head(colnames(AUC_AD))
+
+pseudoAUC_AD <- pseudobulk(as.matrix(AUC_AD), metaAD$pseudobulk_id)
+pseudoAUC_AD <- as.data.frame(as.matrix(pseudoAUC_AD))
+``` 
+
+```{r}
+pseudoCountsAD <- pseudoCountsAD %>% filter(rownames(pseudoCountsAD) %in% rownames(pseudoAUC_AD))
+(pseudoAUC_AD %>% filter(!rownames(pseudoAUC_AD) %in% rownames(pseudoCountsAD)))[,1:5]
+```
+
+### RSS scores of all cell types
+```{r}
+RSS_AD <- read.csv("RSS_AD.csv")
+rownames(RSS_AD) <- gsub("_.*", "", rownames(RSS_AD))
+pseudoCountsAD <- pseudoCountsAD %>% filter(rownames(pseudoCountsAD) %in% rownames(RSS_AD))
+```
+
+Highest AUC values
+```{r}
+ASC <- pseudoAUC_AD["ASC"]
+ASC <- ASC %>% arrange(desc(ASC))
+ASC <- ASC %>% slice(1:12)
+
+MG <- pseudoAUC_AD["MG"]
+MG <- MG %>% arrange(desc(MG))
+MG <- MG %>% slice(1:12)
+
+ODC <- pseudoAUC_AD["ODC"]
+ODC <- ODC %>% arrange(desc(ODC))
+ODC <- ODC %>% slice(1:12)
+
+OPC <- pseudoAUC_AD["OPC"]
+OPC <- OPC %>% arrange(desc(OPC))
+OPC <- OPC %>% slice(1:12)
+
+EX <- pseudoAUC_AD["EX"]
+EX <- EX %>% arrange(desc(EX))
+EX <- EX %>% slice(1:12)
+
+INH <- pseudoAUC_AD["INH"]
+INH <- INH %>% arrange(desc(INH))
+INH <- INH %>% slice(1:12)
+
+PER.END <- pseudoAUC_AD["PER.END"]
+PER.END <- PER.END %>% arrange(desc(PER.END))
+PER.END <- PER.END %>% slice(1:12)
+
+TFs_selected_AUC <- c(rownames(ASC), rownames(EX), rownames(INH), rownames(MG), rownames(ODC), rownames(OPC), 
+                  rownames(PER.END))
+TFs_selected_AUC <- unique(TFs_selected_AUC)
+TFs_selected_AUC
+```
+
+The expression of the TFs is dominated by ODC because these cell were most numerous  
+I will divide by the number of counts per cell type to correct for this  
+```{r}
+sum_ASC <- sum(pseudoCountsAD$ASC)
+sum_OPC <- sum(pseudoCountsAD$OPC)
+sum_ODC <- sum(pseudoCountsAD$ODC)
+sum_MG <- sum(pseudoCountsAD$MG)
+sum_INH <- sum(pseudoCountsAD$INH)
+sum_EX <- sum(pseudoCountsAD$EX)
+sum_PEREND <- sum(pseudoCountsAD$PER.END)
+pseudoCountsAD <- pseudoCountsAD %>% mutate(ASC1 = ASC/sum_ASC)
+pseudoCountsAD <- pseudoCountsAD %>% mutate(OPC1 = OPC/sum_OPC)
+pseudoCountsAD <- pseudoCountsAD %>% mutate(ODC1 = ODC/sum_ODC)
+pseudoCountsAD <- pseudoCountsAD %>% mutate(MG1 = MG/sum_MG)
+pseudoCountsAD <- pseudoCountsAD %>% mutate(EX1 = EX/sum_EX)
+pseudoCountsAD <- pseudoCountsAD %>% mutate(INH1 = INH/sum_INH)
+pseudoCountsAD <- pseudoCountsAD %>% mutate(PER.END1 = PER.END/sum_PEREND)
+pseudoCountsAD <- pseudoCountsAD %>% select(ASC1, EX1, INH1, MG1, OPC1, ODC1, PER.END1)
+colnames(pseudoCountsAD) <- c("ASC", "EX", "INH", "MG", "OPC", "ODC", "PER.END")
+```
+
+Also normalize RSS scores as the scores are also highest for ODCs  
+```{r}
+head(RSS_AD)
+sum_ASC <- sum(RSS_AD$ASC)
+sum_OPC <- sum(RSS_AD$OPC)
+sum_ODC <- sum(RSS_AD$ODC)
+sum_MG <- sum(RSS_AD$MG)
+sum_INH <- sum(RSS_AD$INH)
+sum_EX <- sum(RSS_AD$EX)
+sum_PEREND <- sum(RSS_AD$PER.END)
+RSS_AD <- RSS_AD %>% mutate(ASC1 = ASC/sum_ASC)
+RSS_AD <- RSS_AD %>% mutate(OPC1 = OPC/sum_OPC)
+RSS_AD <- RSS_AD %>% mutate(ODC1 = ODC/sum_ODC)
+RSS_AD <- RSS_AD %>% mutate(MG1 = MG/sum_MG)
+RSS_AD <- RSS_AD %>% mutate(EX1 = EX/sum_EX)
+RSS_AD <- RSS_AD %>% mutate(INH1 = INH/sum_INH)
+RSS_AD <- RSS_AD %>% mutate(PER.END1 = PER.END/sum_PEREND)
+RSS_AD <- RSS_AD %>% select(ASC1, EX1, INH1, MG1, OPC1, ODC1, PER.END1)
+colnames(RSS_AD) <- c("ASC", "EX", "INH", "MG", "OPC", "ODC", "PER.END")
+```
+
+Normalize AUC scores
+```{r}
+sum_ASC <- sum(pseudoAUC_AD$ASC)
+sum_OPC <- sum(pseudoAUC_AD$OPC)
+sum_ODC <- sum(pseudoAUC_AD$ODC)
+sum_MG <- sum(pseudoAUC_AD$MG)
+sum_INH <- sum(pseudoAUC_AD$INH)
+sum_EX <- sum(pseudoAUC_AD$EX)
+sum_PEREND <- sum(pseudoAUC_AD$PER.END)
+pseudoAUC_AD <- pseudoAUC_AD %>% mutate(ASC1 = ASC/sum_ASC)
+pseudoAUC_AD <- pseudoAUC_AD %>% mutate(OPC1 = OPC/sum_OPC)
+pseudoAUC_AD <- pseudoAUC_AD %>% mutate(ODC1 = ODC/sum_ODC)
+pseudoAUC_AD <- pseudoAUC_AD %>% mutate(MG1 = MG/sum_MG)
+pseudoAUC_AD <- pseudoAUC_AD %>% mutate(EX1 = EX/sum_EX)
+pseudoAUC_AD <- pseudoAUC_AD %>% mutate(INH1 = INH/sum_INH)
+pseudoAUC_AD <- pseudoAUC_AD %>% mutate(PER.END1 = PER.END/sum_PEREND)
+pseudoAUC_AD <- pseudoAUC_AD %>% select(ASC1, EX1, INH1, MG1, OPC1, ODC1, PER.END1)
+colnames(pseudoAUC_AD) <- c("ASC", "EX", "INH", "MG", "OPC", "ODC", "PER.END")
+```
+
+### Select TFs 
+```{r}
+pseudoCountsAD <- pseudoCountsAD %>% filter(rownames(pseudoCountsAD) %in% TFs_selected_AUC) 
+RSS_AD <- RSS_AD %>% filter(rownames(RSS_AD) %in% TFs_selected_AUC)
+pseudoAUC_AD <- pseudoAUC_AD %>% filter(rownames(pseudoAUC_AD) %in% TFs_selected_AUC)
+```
+
+format df for plotting
+
+```{r}
+RSS_AD <- RSS_AD %>% rownames_to_column("TF")
+RSS_AD_long <- pivot_longer(RSS_AD, cols = !TF, names_to = "Celltype", values_to = "RSS")
+
+pseudoCountsAD <- pseudoCountsAD %>% rownames_to_column("TF")
+counts_AD_long <- pivot_longer(pseudoCountsAD, cols = !TF, names_to = "Celltype", values_to = "Counts")
+
+pseudoAUC_AD <- pseudoAUC_AD %>% rownames_to_column("TF")
+AUC_AD_long <- pivot_longer(pseudoAUC_AD, cols = !TF, names_to = "Celltype", values_to = "AUC")
+```
+
+```{r}
+plotting_df <- merge(counts_AD_long, RSS_AD_long, by = c("TF", "Celltype"), all = T)
+plotting_df <- merge(plotting_df, AUC_AD_long, by = c("TF", "Celltype"), all = T)
+plotting_df$Counts <- rescale(plotting_df$Counts)
+plotting_df$RSS <- rescale(plotting_df$RSS)
+plotting_df$AUC <- rescale(plotting_df$AUC)
+plotting_df$Celltype <- factor(plotting_df$Celltype, levels = rev(unique(plotting_df$Celltype)))
+plotting_df$TF <- paste0(plotting_df$TF, "(+)")
+```
+
+### Heatmap dotplot with selected TFs, showing AUC values, TF expression and RSS score  
+https://scenicplus.readthedocs.io/en/latest/_modules/scenicplus/plotting/dotplot.html  
+```{r fig.height=6, fig.width=13}
+ggplot(plotting_df, aes(x = TF, y = Celltype)) +
+  geom_tile(mapping = aes(fill = AUC)) + 
+  scale_fill_viridis(name = "Regulon activity", option = "A", direction = -1, begin = 0.1, end = 0.9) +
+  new_scale_fill() +
+  geom_point(mapping = aes(size = RSS, fill = Counts),
+              shape = 21, colour = "black", stroke = 0.1) + 
+  scale_size_continuous(range = c(0.3, 5), name = "RSS") + # change range size of points
+  scale_fill_viridis(name = "TF expression", option = "E", begin = 0.1) +
+  coord_fixed(ratio = 1.7) +
+  scale_y_discrete(labels = c("Pericytes-endothelial cells", "OPCs", "Oligodendrocytes", 
+                              "Microglia", "Inhibitory neurons", "Excitatory neurons",  
+                              "Astrocytes")) +
+  scale_x_discrete(limits = c(paste0(TFs_selected_AUC, "(+)"))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(), axis.line = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1), text = element_text(size = 15), 
+        legend.position = "bottom")
+ggsave("Heatmap_dotplot_AD_top12AUC.pdf", device = "pdf", width = 13, height = 4)
+```
+
+
+# MDD
+
+```{r}
+metaMDD <- seuratObjMDD@meta.data
+metaMDD <- metaMDD %>% select(Celltype) 
+```
+
+### RSS scores and TF expression
+```{r}
+RSS_MDD <- read.csv("RSS_MDD.csv")
+rownames(RSS_MDD) <- gsub("_.*", "", rownames(RSS_MDD))
+
+pypeMDD <- pype_from_seurat(seuratObjMDD)
+metaMDD$pseudobulk_id <- pseudobulk_id(metaMDD)
+
+pseudoCountsMDD <- pseudobulk(pypeMDD$raw, metaMDD$pseudobulk_id)
+pseudoCountsMDD <- as.data.frame(as.matrix(pseudoCountsMDD))
+pseudoCountsMDD <- pseudoCountsMDD %>% filter(rownames(pseudoCountsMDD) %in% rownames(RSS_MDD))
+
+RSS_MDD <- RSS_MDD %>% select(-MIX)
+pseudoCountsMDD <- pseudoCountsMDD %>% select(-MIX)
+```
+
+### AUC scores
+```{r}
+#AUC_MDD <- read_csv2("regulonAUC_MDD.csv")
+loom <- open_loom(file.path = "~/MyFiles/Master/single-cell/SCENIC_output_MDD.loom")
+regulonAUC <- get_regulons_AUC(loom)
+close_loom(loom)
+head(regulonAUC)
+AUCdata <- getAUC(regulonAUC) %>% BBmisc::normalize("range")
+AUC_MDD <- as.data.frame(AUCdata)
+rownames(AUC_MDD) <- gsub("_.*", "", rownames(AUC_MDD))
+
+metaMDD_AUC <- metaMDD
+rownames(metaMDD_AUC) <- sub("/", ".", rownames(metaMDD))
+metaMDD_AUC <- metaMDD_AUC %>% filter(rownames(metaMDD_AUC) %in% colnames(AUC_MDD))
+pseudoAUC_MDD <- pseudobulk(as.matrix(AUC_MDD), metaMDD_AUC$pseudobulk_id)
+pseudoAUC_MDD <- as.data.frame(as.matrix(pseudoAUC_MDD))
+```
+
+```{r}
+pseudoCountsMDD <- pseudoCountsMDD %>% filter(rownames(pseudoCountsMDD) %in% rownames(pseudoAUC_MDD))
+(pseudoAUC_MDD %>% filter(!rownames(pseudoAUC_MDD) %in% rownames(pseudoCountsMDD)))[,1:5]
+```
+
+Select TFs according to AUC scores
+```{r}
+ASC <- pseudoAUC_MDD["ASC"]
+ASC <- ASC %>% arrange(desc(ASC))
+ASC <- ASC %>% slice(1:10)
+
+MICRO <- pseudoAUC_MDD["MICRO"]
+MICRO <- MICRO %>% arrange(desc(MICRO))
+MICRO <- MICRO %>% slice(1:10)
+
+ODC <- pseudoAUC_MDD["ODC"]
+ODC <- ODC %>% arrange(desc(ODC))
+ODC <- ODC %>% slice(1:10)
+
+OPC <- pseudoAUC_MDD["OPC"]
+OPC <- OPC %>% arrange(desc(OPC))
+OPC <- OPC %>% slice(1:10)
+
+EX <- pseudoAUC_MDD["EX"]
+EX <- EX %>% arrange(desc(EX))
+EX <- EX %>% slice(1:10)
+
+INH <- pseudoAUC_MDD["INH"]
+INH <- INH %>% arrange(desc(INH))
+INH <- INH %>% slice(1:10)
+
+END <- pseudoAUC_MDD["END"]
+END <- END %>% arrange(desc(END))
+END <- END %>% slice(1:10)
+
+TFs_selected_AUC <- c(rownames(ASC), rownames(END), rownames(EX), rownames(INH), 
+                      rownames(MICRO), rownames(ODC), rownames(OPC))
+TFs_selected_AUC <- unique(TFs_selected_AUC)
+TFs_selected_AUC
+```
+
+I will divide by the number of counts per cell type to correct for the number of counts per cell type
+```{r}
+sum_ASC <- sum(pseudoCountsMDD$ASC)
+sum_OPC <- sum(pseudoCountsMDD$OPC)
+sum_ODC <- sum(pseudoCountsMDD$ODC)
+sum_MICRO <- sum(pseudoCountsMDD$MICRO)
+sum_EX <- sum(pseudoCountsMDD$EX)
+sum_INH <- sum(pseudoCountsMDD$INH)
+sum_END <- sum(pseudoCountsMDD$END)
+pseudoCountsMDD <- pseudoCountsMDD %>% mutate(ASC1 = ASC/sum_ASC)
+pseudoCountsMDD <- pseudoCountsMDD %>% mutate(OPC1 = OPC/sum_OPC)
+pseudoCountsMDD <- pseudoCountsMDD %>% mutate(ODC1 = ODC/sum_ODC)
+pseudoCountsMDD <- pseudoCountsMDD %>% mutate(MICRO1 = MICRO/sum_MICRO)
+pseudoCountsMDD <- pseudoCountsMDD %>% mutate(EX1 = EX/sum_EX)
+pseudoCountsMDD <- pseudoCountsMDD %>% mutate(INH1 = INH/sum_INH)
+pseudoCountsMDD <- pseudoCountsMDD %>% mutate(END1 = END/sum_END)
+pseudoCountsMDD <- pseudoCountsMDD %>% select(ASC1, END1, EX1, INH1, MICRO1, OPC1, ODC1)
+colnames(pseudoCountsMDD) <- c("ASC", "END", "EX", "INH", "MICRO", "OPC", "ODC")
+```
+
+
+Normalize RSS scores
+```{r}
+head(RSS_MDD)
+sum_ASC <- sum(RSS_MDD$ASC)
+sum_OPC <- sum(RSS_MDD$OPC)
+sum_ODC <- sum(RSS_MDD$ODC)
+sum_MICRO <- sum(RSS_MDD$MICRO)
+sum_EX <- sum(RSS_MDD$EX)
+sum_INH <- sum(RSS_MDD$INH)
+sum_END <- sum(RSS_MDD$END)
+RSS_MDD <- RSS_MDD %>% mutate(ASC1 = ASC/sum_ASC)
+RSS_MDD <- RSS_MDD %>% mutate(OPC1 = OPC/sum_OPC)
+RSS_MDD <- RSS_MDD %>% mutate(ODC1 = ODC/sum_ODC)
+RSS_MDD <- RSS_MDD %>% mutate(MICRO1 = MICRO/sum_MICRO)
+RSS_MDD <- RSS_MDD %>% mutate(EX1 = EX/sum_EX)
+RSS_MDD <- RSS_MDD %>% mutate(INH1 = INH/sum_INH)
+RSS_MDD <- RSS_MDD %>% mutate(END1 = END/sum_END)
+RSS_MDD <- RSS_MDD %>% select(ASC1, END1, EX1, INH1, MICRO1, OPC1, ODC1)
+colnames(RSS_MDD) <- c("ASC", "END", "EX", "INH", "MICRO", "OPC", "ODC")
+```
+
+Normalize AUC scores
+```{r}
+sum_ASC <- sum(pseudoAUC_MDD$ASC)
+sum_OPC <- sum(pseudoAUC_MDD$OPC)
+sum_ODC <- sum(pseudoAUC_MDD$ODC)
+sum_MG <- sum(pseudoAUC_MDD$MICRO)
+sum_INH <- sum(pseudoAUC_MDD$INH)
+sum_EX <- sum(pseudoAUC_MDD$EX)
+sum_PEREND <- sum(pseudoAUC_MDD$END)
+pseudoAUC_MDD <- pseudoAUC_MDD %>% mutate(ASC1 = ASC/sum_ASC)
+pseudoAUC_MDD <- pseudoAUC_MDD %>% mutate(OPC1 = OPC/sum_OPC)
+pseudoAUC_MDD <- pseudoAUC_MDD %>% mutate(ODC1 = ODC/sum_ODC)
+pseudoAUC_MDD <- pseudoAUC_MDD %>% mutate(MG1 = MICRO/sum_MG)
+pseudoAUC_MDD <- pseudoAUC_MDD %>% mutate(EX1 = EX/sum_EX)
+pseudoAUC_MDD <- pseudoAUC_MDD %>% mutate(INH1 = INH/sum_INH)
+pseudoAUC_MDD <- pseudoAUC_MDD %>% mutate(PER.END1 = END/sum_PEREND)
+pseudoAUC_MDD <- pseudoAUC_MDD %>% select(ASC1, EX1, INH1, MG1, OPC1, ODC1, PER.END1)
+colnames(pseudoAUC_MDD) <- c("ASC", "EX", "INH", "MICRO", "OPC", "ODC", "END")
+```
+
+Select TFs 
+```{r}
+pseudoCountsMDD <- pseudoCountsMDD %>% filter(rownames(pseudoCountsMDD) %in% TFs_selected_AUC) 
+RSS_MDD <- RSS_MDD %>% filter(rownames(RSS_MDD) %in% TFs_selected_AUC)
+pseudoAUC_MDD <- pseudoAUC_MDD %>% filter(rownames(pseudoAUC_MDD) %in% TFs_selected_AUC)
+```
+
+```{r}
+RSS_MDD <- RSS_MDD %>% rownames_to_column("TF")
+RSS_MDD_long <- pivot_longer(RSS_MDD, cols = !TF, names_to = "Celltype", values_to = "RSS")
+
+pseudoCountsMDD <- pseudoCountsMDD %>% rownames_to_column("TF")
+counts_MDD_long <- pivot_longer(pseudoCountsMDD, cols = !TF, names_to = "Celltype", values_to = "Counts")
+
+pseudoAUC_MDD <- pseudoAUC_MDD %>% rownames_to_column("TF")
+AUC_MDD_long <- pivot_longer(pseudoAUC_MDD, cols = !TF, names_to = "Celltype", values_to = "AUC")
+```
+
+format df for plotting  
+```{r}
+plotting_df <- merge(counts_MDD_long, RSS_MDD_long, by = c("TF", "Celltype"), all = T)
+plotting_df <- merge(plotting_df, AUC_MDD_long, by = c("TF", "Celltype"), all = T)
+plotting_df$Counts <- rescale(plotting_df$Counts)
+plotting_df$RSS <- rescale(plotting_df$RSS)
+plotting_df$AUC <- rescale(plotting_df$AUC)
+plotting_df$Celltype <- factor(plotting_df$Celltype, levels = rev(unique(plotting_df$Celltype)))
+plotting_df$TF <- paste0(plotting_df$TF, "(+)")
+```
+
+
+### Heatmap dotplot with selected TFs, showing AUC scores, TF expression and RSS score  
+https://scenicplus.readthedocs.io/en/latest/_modules/scenicplus/plotting/dotplot.html  
+```{r fig.height=6, fig.width=13}
+ggplot(plotting_df, aes(x = TF, y = Celltype)) +
+  geom_tile(mapping = aes(fill = AUC)) + 
+  scale_fill_viridis(name = "Regulon activity", option = "A", direction = -1, begin = 0.2, end = 0.95) +
+  new_scale_fill() +
+  geom_point(mapping = aes(size = RSS, fill = Counts),
+              shape = 21, colour = "black", stroke = 0.1) + 
+  scale_size_continuous(range = c(0.3, 5), name = "RSS") + # change range size of points
+  scale_fill_viridis(name = "TF expression", option = "E", begin = 0.1) +
+  coord_fixed(ratio = 1.7) +
+  scale_y_discrete(labels = c("OPCs", "Oligodendrocytes", "Microglia", "Inhibitory neurons", 
+                              "Excitatory neurons", "Endothelial cells", "Astrocytes")) +
+  scale_x_discrete(limits = c(paste0(TFs_selected_AUC, "(+)"))) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(), axis.line = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1), text = element_text(size = 15), 
+        legend.position = "bottom")
+ggsave("Heatmap_dotplot_MDD_top10AUC.pdf", device = "pdf", width = 13, height = 4)
+```

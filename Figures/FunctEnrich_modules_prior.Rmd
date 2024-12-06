@@ -1,0 +1,258 @@
+---
+title: "Pathways modules figure"
+author: "Hanne Puype"
+date: "2024-06-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+## Load packages
+```{r}
+library(tidyverse)
+library(pheatmap)
+library(RColorBrewer)
+```
+
+## Compare modules' pathways  
+I need to get the enrichment terms with their p-values for the modules 
+heatmap: pathways, modules, annotation of where the term came from and the colors are the adjusted p-values
+white when it's not enriched  
+Prioritized AD: modules 22, 39, 51 and 153; MDD: modules 24, 36, 110 and 115
+
+steered by similar TFs: AD 141, MDD 37, 63 and 81
+```{r}
+files <- list.files(path = "FunctionalEnrich_ens", pattern = "*.txt", full.names = TRUE)
+files <- files[c(48, 61, 71, 89, 103, 169, 174, 229, 242, 243, 272, 292)]
+files
+```
+
+Now I need to retrieve the pathways and their p-values for the modules 
+```{r}
+pathways <- c("regulation of interleukin",
+              "regulation of tumor necrosis factor production", "IL-3 signaling pathway", 
+              "anti-inflammatory signaling pathway", "interferon gamma signaling", 
+              "IL-18 signaling pathway", "antigen bound to MHC molecule", 
+              "cell chemotaxis", "Th1 and Th2 cell differentiation", "TCR signaling", "T-cell receptor",
+              "regulation of B cell proliferation", "neutrophil degranulation", 
+              "TYROBP causal network in microglia","Microglia Pathogen Phagocytosis Pathway", 
+              "regulation of microglial cell migration", "phagocytosis, engulfment", 
+              "negative regulation of innate immune response",
+              "negative regulation of immune response", "negative regulation of adaptive immune response",
+              "Toll-like receptor signaling pathway", "response to unfolded protein", 
+              "regulation of cell cycle", "regulation of cell apoptotic process", "TNF",
+              "apopto", "amyloid beta binding", "Complement activation", "senescence")
+```
+
+Get the terms from the files for each module 
+```{r}
+df <- data.frame("Term" = character(0), "Overlap" = character(), "P.value" = numeric(), 
+                 "Adjusted.P.value" = numeric(), "Old.P.value" = numeric(), "Old.Adjusted.P.value" = numeric(),
+                 "Odds.Ratio" = numeric(), "Combined.Score" = numeric(), "Genes" = character(), "Module" = character())
+for (thisfile in files) {
+  data <- read.delim(thisfile, row.names = NULL)
+  data <- data %>% dplyr::select(-row.names)
+  data$Module <- basename(thisfile)
+  data <- data %>% dplyr::filter(grepl(paste(pathways, collapse="|"), Term, ignore.case = T)) 
+  df <- rbind(df, data)
+}
+```
+
+Tweaking for plotting 
+```{r}
+df <- df %>% mutate(Module = gsub("FunctionalEnrichment_module", "AD_", df$Module))
+df <- df %>% mutate(Module = gsub("FunctionalEnrichmentMDD_module", "MDD_", df$Module))
+df <- df %>% mutate(Module = gsub(".txt", "", df$Module))
+```
+
+```{r}
+df <- df %>% select(Term, Adjusted.P.value, Module)
+df <- df %>% add_column(DB_pathway = case_when(
+  grepl(" \\(GO", df$Term) ~ "GO",
+  grepl(" WP", df$Term) ~ "WikiPathways",
+  grepl(" Homo", df$Term) ~ "Reactome",
+  T ~ "KEGG"))
+
+df$Term <- gsub(" \\(GO.*", "", df$Term)
+df$Term <- gsub(" WP.*", "", df$Term)
+df$Term <- gsub(" Homo.*", "", df$Term)
+```
+
+Filter the redundant or unique ones to one module 
+```{r}
+df <- df %>% filter(!(Term %in% c("negative regulation of epithelial cell apoptotic process",
+                                  "negative regulation of endothelial cell apoptotic process",
+                                  "negative regulation of extrinsic apoptotic signaling pathway via death domain receptors",
+                                  "regulation of extrinsic apoptotic signaling pathway via death domain receptors",
+                                  "regulation of endothelial cell apoptotic process",
+                                  "positive regulation of apoptotic signaling pathway",
+                                  "positive regulation of cysteine-type endopeptidase activity involved in apoptotic process",
+                                  "positive regulation of interleukin-23 production",
+                                  "regulation of interleukin-23 production",
+                                  "positive regulation of interleukin-13 production",
+                                  "positive regulation of leukocyte apoptotic process",
+                                  "regulation of interleukin-13 production",
+                                  "activation of cysteine-type endopeptidase activity involved in apoptotic process", 
+                                  "TRIF-dependent toll-like receptor signaling pathway",
+                                  "MyD88-independent toll-like receptor signaling pathway", 
+                                  "regulation of interleukin-17 production",
+                                  "regulation of cell cycle G1/S phase transition",
+                                  "cellular response to unfolded protein",
+                                  "negative regulation of cell cycle",
+                                  "negative regulation of extrinsic apoptotic signaling pathway",
+                                  "negative regulation of extrinsic apoptotic signaling pathway in absence of ligand",
+                                  "regulation of extrinsic apoptotic signaling pathway in absence of ligand",
+                                  "negative regulation of apoptotic process",
+                                  "IL-18 signaling pathway",
+                                  "Apoptosis Modulation and Signaling",
+                                  "Apoptosis-related network due to altered Notch3 in ovarian cancer",
+                                  "negative regulation of dendritic cell apoptotic process",
+                                  "positive regulation of cysteine-type endopeptidase activity involved in apoptotic signaling pathway",
+                                  "positive regulation of dendritic cell chemotaxis",
+                                  "positive regulation of cell cycle G1/S phase transition",
+                                  "positive regulation of interleukin-8 production",
+                                  "positive regulation of interleukin-6 production",
+                                  "negative regulation of interleukin-2 production",
+                                  "negative regulation of interleukin-1 beta production",
+                                  "positive regulation of interleukin-12 production",
+                                  "positive regulation of tumor necrosis factor production",
+                                  "negative regulation of tumor necrosis factor production",
+                                  "Downstream TCR signaling",
+                                  "positive regulation of toll-like receptor signaling pathway",
+                                  "negative regulation of B cell proliferation",
+                                  "positive regulation of interleukin-4 production",
+                                  "Classical antibody-mediated complement activation",
+                                  "negative regulation of interleukin-8 production",
+                                  "regulation of toll-like receptor signaling pathway",
+                                  "positive regulation of interleukin-1 beta production",
+                                  "positive regulation of phagocytosis, engulfment",
+                                  "positive regulation of interleukin-2 production",
+                                  "Toll-like receptor signaling pathway",
+                                  "Toll-like Receptor Signaling Pathway",
+                                  "positive regulation of apoptotic cell clearance",
+                                  "apoptotic process",
+                                  "Modulators of TCR signaling and T cell activation",
+                                  "regulation of dendritic cell chemotaxis",
+                                  "negative regulation of interleukin-6 production",
+                                  "dendritic cell chemotaxis",
+                                  "negative regulation of interleukin-1 production",
+                                  "positive regulation of interleukin-1 production",
+                                  "regulation of complement activation",
+                                  "negative regulation of toll-like receptor signaling pathway",
+                                  "positive regulation of microglial cell migration",
+                                  "Regulation of toll-like receptor signaling pathway",
+                                  "MyD88-dependent toll-like receptor signaling pathway",
+                                  "regulation of neutrophil degranulation",
+                                  "complement activation, classical pathway",
+                                  "regulation of phagocytosis, engulfment",
+                                  "TNF-alpha signaling pathway",
+                                  "Senescence-Associated Secretory Phenotype (SASP)",
+                                  "Senescence and Autophagy in Cancer",
+                                  "Oxidative Stress Induced Senescence")))
+```
+
+Some tweaking of the terms to make them more readable
+```{r}
+df <- df %>% mutate(Term = case_when(Term == 
+                       "regulation of T cell activation via T cell receptor contact with antigen bound to MHC molecule on antigen presenting cell" ~ 
+                       "regulation T cell activation via TCR contact with antigen bound to MHC molecule on APC", 
+                       T ~ Term))
+df <- df %>% mutate(Term = case_when(grepl("apopto", df$Term, ignore.case = T) ~ "Apoptosis", 
+                                     T ~ Term))
+df <- df %>% mutate(DB_pathway = case_when(Term == "Apoptosis" ~ "Mixed", 
+                                           T ~ DB_pathway))
+df <- df %>% mutate(Term = case_when(grepl("-10", df$Term, ignore.case = T) ~ "IL-10 signaling pathway",
+                                     T ~ Term))
+df <- df %>% mutate(DB_pathway = case_when(Term == "IL-10 signaling pathway" ~ "Mixed", 
+                                           T ~ DB_pathway))
+df <- df %>% mutate(Term = case_when(grepl("TNF", df$Term, ignore.case = T) ~ "TNF signaling pathway",
+                                     T ~ Term))
+df <- df %>% mutate(Term = case_when(grepl("tumor necrosis factor", df$Term, ignore.case = T) ~ "TNF signaling pathway",
+                                     T ~ Term))
+df <- df %>% mutate(DB_pathway = case_when(Term == "TNF signaling pathway" ~ "Mixed", 
+                                           T ~ DB_pathway))
+df <- df %>% mutate(Term = case_when(grepl("TCR", df$Term, ignore.case = T) ~ "TCR signaling",
+                                     T ~ Term))
+df <- df %>% mutate(DB_pathway = case_when(Term == "TCR signaling" ~ "Mixed", 
+                                           T ~ DB_pathway))
+df <- df %>% mutate(Term = case_when(grepl("Cellular Senescence", df$Term, ignore.case = T) ~ "Cellular senescence",
+                                     T ~ Term))
+df <- df %>% mutate(DB_pathway = case_when(Term == "Cellular senescence" ~ "Mixed", 
+                                           T ~ DB_pathway))
+df <- df %>% mutate(Term = case_when(Term == "negative regulation of innate immune response" ~ 
+                                       "negative regulation of immune response",
+                                     T ~ Term))
+df <- df %>% distinct(Term, Module, .keep_all = T)
+```
+
+```{r}
+df_wide <- df %>% select(-DB_pathway) %>% pivot_wider(names_from = Module, values_from = Adjusted.P.value)
+df_wide <- column_to_rownames(df_wide, "Term")
+```
+
+```{r}
+my_colour <- list(
+    DB_pathway = c(GO = "#44BB99", WikiPathways = "#FFAABB",
+                   KEGG = "#99DDFF", Reactome = "#EEDD88",
+                   Mixed = "#EE8866"))
+```
+
+## Plot the heatmap
+Only with eight prioritizes modules 
+```{r}
+df_wide_prior <- df_wide %>% select("AD_22", "AD_39", "AD_51", "AD_153", "MDD_24", "MDD_36", "MDD_110", "MDD_115")
+df_wide_prior <- df_wide_prior[rowSums(is.na(df_wide_prior)) < 7,]
+df_wide_prior <- df_wide_prior %>% filter(!(rownames(df_wide_prior) %in% 
+                                              c("positive regulation of B cell proliferation",
+                                                "regulation of cell cycle",
+                                                "response to unfolded protein")))
+```
+
+```{r}
+df_wide_prior_t <- t(df_wide_prior)
+df_wide_prior_tt <- apply(df_wide_prior_t, 2, as.numeric)
+rownames(df_wide_prior_tt) <- rownames(df_wide_prior_t)
+df_wide_prior_tt <- df_wide_prior_tt[,order(colSums(is.na(df_wide_prior_tt)))]
+colnames(df_wide_prior_tt) <- toTitleCase(colnames(df_wide_prior_tt))
+```
+
+```{r}
+df_prior <- df %>% filter(Module %in% c("AD_22", "AD_39", "AD_51", "AD_153", "MDD_24", "MDD_36", "MDD_110", "MDD_115"))
+df_prior$Term <- toTitleCase(df_prior$Term)
+annot_prior <- df_prior %>% select(Term, DB_pathway) %>% distinct() %>% column_to_rownames("Term")
+```
+
+```{r}
+df_wide_prior_tt <- as.data.frame(df_wide_prior_tt)
+df_wide_prior_tt <- df_wide_prior_tt %>% select("TNF Signaling Pathway", "Apoptosis",
+                                                "Regulation of Interleukin-1 Beta Production", 
+                                                "Regulation of Interleukin-8 Production",
+                                                "TCR Signaling", "Neutrophil Degranulation", 
+                                                "IL-10 Signaling Pathway", "Interferon Gamma Signaling",
+                                                "TYROBP Causal Network in Microglia",
+                                                "Microglia Pathogen Phagocytosis Pathway",
+                                                "Regulation of Interleukin-6 Production",
+                                                "IL-3 Signaling Pathway", "Negative Regulation of Immune Response",
+                                                "Cellular Senescence", everything())
+``` 
+
+```{r fig.height=12}
+pheatmap(df_wide_prior_tt, annotation_col = annot_prior, cellheight = 20, cellwidth = 20,
+         annotation_colors = my_colour, fontsize = 15, annotation_names_col = F,
+         cluster_cols = F, cluster_rows = F, na_col = "grey95",
+         color = viridis(100, option = "D", direction = 1, begin = 0.1, end = 0.95, alpha = 0.8),
+         angle_col = 315, main = "Enriched pathways in prioritized modules")
+```
+
+```{r}
+pdf("Heatmap_modules_prior.pdf", width = 14, height = 12)
+pheatmap(df_wide_prior_tt, annotation_col = annot_prior, cellheight = 20, cellwidth = 21,
+         annotation_colors = my_colour, fontsize = 15, annotation_names_col = F,
+         cluster_cols = F, cluster_rows = F, na_col = "grey95",
+         color = viridis(100, option = "D", direction = 1, begin = 0.1, end = 0.95, alpha = 0.8),
+         angle_col = 315, main = "Enriched pathways in prioritized modules",
+         labels_row = c("22 AD", "39 AD", "51 AD", "153 AD", "24 MDD", "36 MDD", "110 MDD", "115 MDD"))
+dev.off()
+```

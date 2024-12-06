@@ -1,0 +1,161 @@
+---
+title: "Venn diagrams all ground truths for three GRN methods"
+author: "Hanne Puype"
+date: "2024-01-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load packages and data
+```{r}
+library(tidyverse)
+library(ggVennDiagram)
+```
+
+```{r}
+linklistAD <- read.table("LinkList_AD_top.csv", header = T, sep = ",") #GENIE3
+linklistMDD <- read.table("LinkList_MDD_top.csv", header = T, sep = ",")
+networkCLR_AD <- read.table("network_AD_reg.csv", header = T, sep = ",") #CLR
+networkCLR_MDD <- read.table("network_MDD_reg.csv", header = T, sep = ",")
+edgelist_AD <- read.table("Lemon-Tree/EdgeListLT3_AD.csv", sep = ",", header = T) # Lemon-Tree
+edgelist_MDD <- read.table("Lemon-Tree/EdgeListLT3_MDD.csv", sep = ",", header = T)
+```
+
+```{r}
+genes_AD <- c(linklistAD$targetGene, networkCLR_AD$gene2, edgelist_AD$Target_gene)
+TFs_AD <- c(linklistAD$regulatoryGene, networkCLR_AD$gene1, edgelist_AD$Regulator)
+
+genes_MDD <- c(linklistMDD$targetGene, networkCLR_MDD$gene2, edgelist_MDD$Target_gene)
+TFs_MDD <- c(linklistMDD$regulatoryGene, networkCLR_MDD$gene1, edgelist_MDD$Regulator)
+```
+
+```{r}
+edgesAD1 <- read.table("edgesAD1.txt")
+edgesAD2 <- read.table("edgesAD2.txt")
+edgesAD3 <- read.table("edgesAD3.txt")
+edgesMDD1 <- read.table("edgesMDD1.txt")
+edgesMDD2 <- read.table("edgesMDD2.txt")
+edgesMDD3 <- read.table("edgesMDD3.txt")
+edgesAD1 <- edgesAD1$V1
+edgesAD2 <- edgesAD2$V1
+edgesAD3 <- edgesAD3$V1
+edgesMDD1 <- edgesMDD1$V1
+edgesMDD2 <- edgesMDD2$V1
+edgesMDD3 <- edgesMDD3$V1
+```
+
+UniBind 
+```{r}
+closest_UniBind_TSS <- read.table("UniBind/closest_UniBind_TSS_ndup.bed")
+colnames(closest_UniBind_TSS) <- c("TF", "Gene", "Distance")
+closest_UniBind_TSS_f <- closest_UniBind_TSS %>% filter(Distance < 10000)
+dbTF <- read.csv("dbTF.csv", sep="")
+closest_UniBind_TSS_f <- closest_UniBind_TSS_f %>% filter(TF %in% dbTF$Gene_symbol)
+closest_UniBind_TSS_f$concat <- paste(closest_UniBind_TSS_f$TF, closest_UniBind_TSS_f$Gene, sep = ":")
+dim(closest_UniBind_TSS_f) # 1 463 247  
+```
+
+```{r}
+UniBind_AD <- closest_UniBind_TSS_f %>% filter(TF %in% TFs_AD) %>% filter(Gene %in% genes_AD)
+UniBind_MDD <- closest_UniBind_TSS_f %>% filter(TF %in% TFs_MDD) %>% filter(Gene %in% genes_MDD)
+```
+
+
+knockTF
+```{r}
+KnockTF_all <- read.delim("KnockTF/differential_expression_of_genes_all_datasets.txt")
+KnockTF_all <- KnockTF_all %>% select(TF, Gene)
+KnockTF_all$concat <- paste(KnockTF_all$TF, KnockTF_all$Gene, sep = ":")
+KnockTF_all <- KnockTF_all %>% distinct()
+dim(KnockTF_all) # 4948875
+```
+
+```{r}
+KnockTF_all_AD <- KnockTF_all %>% filter(TF %in% TFs_AD) %>% 
+  filter(Gene %in% genes_AD)
+KnockTF_all_MDD <- KnockTF_all %>% filter(TF %in% TFs_MDD) %>% 
+  filter(Gene %in% genes_MDD)
+```
+
+OmniPath
+```{r}
+gri <- read.delim("OmniPath/Omnipath.txt") # levels A, B, C and D
+dim(gri)
+gri_collecTRI <- read.delim("OmniPath/CollecTRI.txt")
+gri_f <- bind_rows(gri, gri_collecTRI)
+```
+
+```{r}
+gri_f <- gri_f %>% filter(source_genesymbol %in% dbTF$Gene_symbol)
+gri_f <- gri_f %>% select(source_genesymbol, target_genesymbol)
+names(gri_f) <- c("TF", "Target_gene")
+gri_f$concat <- paste(gri_f$TF, gri_f$Target_gene, sep = ":")
+gri_f <- gri_f %>% distinct()
+dim(gri_f) # 111376 
+```
+
+```{r}
+gri_f_AD <- gri_f %>% filter(TF %in% TFs_AD) %>% filter(Target_gene %in% genes_AD)
+gri_f_MDD <- gri_f %>% filter(TF %in% TFs_MDD) %>% filter(Target_gene %in% genes_MDD)
+```
+
+Marbach 
+```{r}
+frontal_lobe_adult <- read.delim("networks/FANTOM5_individual_networks/394_individual_networks/frontal_lobe_adult.txt.gz", 
+                                 header=FALSE)
+frontal_lobe_adult <- frontal_lobe_adult %>% arrange(desc(V3))
+frontal_lobe_adult <- frontal_lobe_adult %>% filter(V1 %in% dbTF$Gene_symbol)
+dim(frontal_lobe_adult) # 1 086 698 
+frontal_lobe_adult <- frontal_lobe_adult %>% select(V1, V2)
+names(frontal_lobe_adult) <- c("TF", "Target_gene")
+frontal_lobe_adult$concat <- paste(frontal_lobe_adult$TF, frontal_lobe_adult$Target_gene, sep = ":")
+```
+
+```{r}
+frontal_lobe_adult_AD <- frontal_lobe_adult %>% filter(TF %in% TFs_AD) %>% filter(Target_gene %in% genes_AD)
+frontal_lobe_adult_MDD <- frontal_lobe_adult %>% filter(TF %in% TFs_MDD) %>% filter(Target_gene %in% genes_MDD)
+```
+
+Take everything together
+```{r}
+groundtruth_AD <- unique(c(UniBind_AD$concat, KnockTF_all_AD$concat, gri_f_AD$concat, frontal_lobe_adult_AD$concat))
+length(groundtruth_AD) # 1 878 921
+groundtruth_MDD <- unique(c(UniBind_MDD$concat, KnockTF_all_MDD$concat, gri_f_MDD$concat, frontal_lobe_adult_MDD$concat))
+length(groundtruth_MDD) # 1 830 357
+```
+
+## Venn diagrams 
+```{r}
+x <- list(edgesAD1, edgesAD2, edgesAD3, groundtruth_AD)
+ggVennDiagram(x, category.names = c("GENIE3",
+                                    "CLR",
+                                    "LemonTree",
+                                    "Ground truth"), label = "count") + 
+  scale_fill_gradient(low = "#F4FAFE", high = "#4981BF") +
+ theme(legend.position = "none") + labs(title = "Venn diagram for AD")
+```
+
+
+```{r}
+x <- list(edgesMDD1, edgesMDD2, edgesMDD3, groundtruth_MDD)
+ggVennDiagram(x, category.names = c("GENIE3",
+                                    "CLR",
+                                    "LemonTree",
+                                    "Ground truth"), label = "count") + 
+  scale_fill_gradient(low = "#F4FAFE", high = "#4981BF") +
+ theme(legend.position = "none") + labs(title = "Venn diagram for MDD")
+```
+
+```{r}
+length(intersect(edgesAD1, groundtruth_AD))
+length(intersect(edgesAD2, groundtruth_AD))
+length(intersect(edgesAD3, groundtruth_AD))
+length(intersect(edgesMDD1, groundtruth_MDD))
+length(intersect(edgesMDD2, groundtruth_MDD))
+length(intersect(edgesMDD3, groundtruth_MDD))
+length(intersect(edgesMDD2, edgesMDD3))
+```
+
