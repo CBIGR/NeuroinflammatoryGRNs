@@ -1,0 +1,534 @@
+---
+title: "Irf8 knockout mouse DEGs"
+author: "Hanne Puype"
+date: "2023-11-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Irf8 conditional KO mice dataset 
+This script is for the analysis of Irf8 conditional KO mice. Paper: https://www.nature.com/articles/s41593-019-0393-4  
+Downloaded from https://www.brainimmuneatlas.org/download.php  
+I tried to follow the general scRNA-seq script on the GitHub: https://github.com/saeyslab/brainimmuneatlas/blob/master/script_scRNAseq.R  
+I want to find the differentially expressed genes between the control and KO microglia.  
+
+## Load Packages
+```{r}
+library(tidyverse)
+library(Seurat)
+library(scater)
+library(scran)
+library(biomaRt)
+```
+
+## Load data
+```{r}
+data_mouse <- Read10X(data.dir = "./filtered_gene_bc_matrices_mex/mm10/")
+```
+
+## Create sce 
+```{r}
+sce <- SingleCellExperiment(list(counts = data_mouse))
+dim(sce)
+
+is.mito <- grepl("^mt-", rownames(sce))
+sum(is.mito)
+```
+
+## Quality control 
+```{r}
+sce <- addPerCellQC(sce, subsets = list(Mt = is.mito))
+dim(colData(sce))
+head(colData(sce))
+```
+
+### Metadata
+```{r}
+metadata_mouse <- read.csv("./annot_JP3435.csv", header = T)
+dim(metadata_mouse) # 12078 cells --> cells used in paper
+head(metadata_mouse)
+table(metadata_mouse$cluster) # empty is microglia?
+table(metadata_mouse$sample)
+head(metadata_mouse %>% filter(sample == "WT"), 100)
+head(metadata_mouse %>% filter(sample == "Irf8 KO"), 100)
+metaData <- data.frame("staticNr" = colnames(data_mouse), "orig.ident" = "WT",
+                     "nGene" = sce$detected, "nUMI" = sce$total,
+                     "percent.mito" = sce$subsets_Mt_percent, stringsAsFactors = F)
+metaData[grep('-2', metaData$staticNr), which(colnames(metaData) == "orig.ident")] <- "Irf8 KO"
+metadata_mouse <- metadata_mouse %>% left_join(metaData, by = join_by("cell" == "staticNr"))
+dim(metadata_mouse)
+metadata_mouse <- metadata_mouse %>% select(cell, sample, cluster, ident, orig.ident, nGene, nUMI, percent.mito, everything())
+metadata_mouse <- column_to_rownames(metadata_mouse, var = "cell")
+```
+
+## Filter sce for cells in metadata
+```{r}
+sce <- sce[, rownames(metadata_mouse)]
+dim(sce)
+```
+
+```{r}
+sce$sample <- metadata_mouse$sample
+sce$cluster <- metadata_mouse$cluster
+head(colData(sce))
+table(colData(sce)$cluster)
+```
+
+```{r}
+metaData <- as.data.frame(colData(sce))
+metaData$nCount.out.low <- isOutlier(metaData$sum, 
+                                     log = T, 
+                                     type = "lower")
+metaData$nCount.out.high <- isOutlier(metaData$sum, 
+                                      log = T, 
+                                      type = "higher")
+nCount.drop <- as.logical(metaData$nCount.out.low + metaData$nCount.out.high)
+sum(nCount.drop)
+
+metaData$nFeature.out.low <- isOutlier(metaData$detected, 
+                                       log = T, 
+                                       type = "lower")
+metaData$nFeature.out.high <- isOutlier(metaData$detected, 
+                                       log = T, 
+                                       type = "higher")
+feature.drop <- as.logical(metaData$nFeature.out.low + metaData$nFeature.out.high)
+sum(feature.drop)
+
+metaData$percent.mt.out.high <- isOutlier(metaData$subsets_Mt_percent, 
+                                   log = T, 
+                                   type = "higher")
+sum(metaData$percent.mt.out.high)
+```
+
+```{r}
+metaData$nGene.drop <- feature.drop
+metaData$nUMI.drop <- nCount.drop
+metaData$final.drop <- feature.drop | nCount.drop | metaData$percent.mt.out.high
+head(metaData)
+sum(metaData$final.drop)
+```
+
+Remove outliers
+```{r}
+sce <- sce[, !(metaData$final.drop)]
+dim(sce)
+```
+
+remove empty genes 
+```{r}
+detected_genes <- rowSums(counts(sce)) > 0
+table(detected_genes)
+sce <- sce[detected_genes,]
+```
+
+PCA
+```{r}
+# specify name of the variables
+varsToUse <- c("detected", "sum", "subsets_Mt_percent")
+# run PCA
+sce <- runColDataPCA(sce, variables = varsToUse, outliers = T)
+sum(colData(sce)$outlier)
+reducedDims(sce)
+plotReducedDim(sce, dimred = "PCA_coldata", colour_by = "outlier")
+```
+
+```{r}
+metaData <- as.data.frame(colData(sce))
+head(metaData)
+non.out <- !(metaData$outlier)
+metaData.filtered <- metaData[non.out, ]
+dim(metaData.filtered)
+dim(metaData)
+# Outliers were removed
+# Now remove them from SCE object
+sce <- sce[, non.out]
+dim(sce)
+```
+
+```{r}
+sce <- addPerFeatureQC(sce)
+colData(sce)$cell_sparsity <- 1 - (colData(sce)$detected / nrow(sce))
+rowData(sce)$gene_sparsity <- (100 - rowData(sce)$detected) / 100
+```
+
+```{r}
+hist(sce$cell_sparsity, breaks = 50, col = "grey80", xlab = "Cell sparsity", main = "")
+```
+
+```{r}
+hist(rowData(sce)$gene_sparsity, breaks = 50, col = "grey80", xlab = "Gene sparsity", main = "")
+```
+
+```{r}
+min.cells <- 1 - (20 / ncol(sce))
+sparse.genes <- rowData(sce)$gene_sparsity > min.cells
+table(sparse.genes)
+```
+
+```{r}
+non.out <- !(sparse.genes)
+sce <- sce[non.out, ]
+dim(sce)
+saveRDS(sce, file = "./sce_mouse.rds")
+sce <- readRDS("./sce_mouse.rds")
+```
+
+## Normalization
+```{r}
+clusters <- quickCluster(sce)
+sce <- computeSumFactors(sce, clusters = clusters)
+summary(sizeFactors(sce))
+sce <- logNormCounts(sce)
+```
+
+## Find variable genes
+### Seurat object 
+```{r}
+Seuratobj <- as.Seurat(sce)
+log_counts <- logcounts(sce)
+log_counts <- log_counts / log2(exp(1)) 
+Seuratobj@assays[["originalexp"]]@data <- log_counts # change logarithmic transformation for Seurat, scran is log2 normalization
+```
+
+```{r}
+Seuratobj <- FindVariableFeatures(Seuratobj, nfeatures = 3000)
+```
+
+## Scaling 
+```{r}
+Seuratobj <- ScaleData(Seuratobj)
+```
+
+## Dimensionality reduction and clustering 
+```{r}
+Seuratobj <- RunPCA(Seuratobj)
+DimPlot(Seuratobj, reduction = "pca")
+ElbowPlot(Seuratobj, ndims = 50)
+```
+
+```{r}
+Seuratobj <- FindNeighbors(Seuratobj, dims = 1:30)
+Seuratobj <- FindClusters(Seuratobj, algorithm = 4, resolution = 0.7) # Leiden clustering
+```
+
+```{r}
+Seuratobj <- RunUMAP(Seuratobj, dims = 1:30)
+DimPlot(Seuratobj, reduction = "umap", label = T)
+ggsave(filename = "UMAP.pdf", width = 10, device = "pdf")
+Seuratobj <- RunTSNE(Seuratobj, dims = 1:30)
+DimPlot(Seuratobj, reduction = "tsne")
+ggsave(filename = "tsne.pdf", width = 10, device = "pdf")
+```
+
+```{r}
+metaData <- Seuratobj@meta.data
+metaData <- metaData %>% mutate(cluster = case_when(cluster == "" ~ "Microglia",
+                                                    T ~ cluster))
+table(metaData$cluster)
+Seuratobj$cluster <- metaData$cluster
+DimPlot(Seuratobj, reduction = "umap", group.by = "cluster", label = T)
+DimPlot(Seuratobj, reduction = "umap", group.by = "sample")
+```
+
+## Differential expression analysis
+https://satijalab.org/seurat/articles/de_vignette  
+```{r}
+table(Seuratobj$cluster, Seuratobj$seurat_clusters)
+Seuratobj <- SetIdent(Seuratobj, value = "cluster")
+Seuratobj
+```
+
+Used Wilcoxon rank sum test in paper (default)
+```{r}
+Seuratobj$celltype.cond <- paste(Seuratobj$cluster, Seuratobj$sample, sep = "_")
+Idents(Seuratobj) <- "celltype.cond"
+table(Seuratobj$celltype.cond)
+MG.de <- FindMarkers(Seuratobj, ident.1 = "Microglia_WT", ident.2 = "Microglia_Irf8 KO", verbose = FALSE)
+head(MG.de)
+```
+
+```{r}
+dim(MG.de %>% filter(p_val_adj < 0.05) %>% filter(abs(avg_log2FC) > 0.5))
+dim(MG.de %>% filter(p_val_adj < 0.01) %>% filter(abs(avg_log2FC) > 1))
+MG.de_lenient <- MG.de %>% filter(p_val_adj < 0.01) %>% filter(abs(avg_log2FC) > 0.5)
+summary((MG.de$avg_log2FC))
+dim(MG.de_lenient)
+```
+
+```{r}
+saveRDS(Seuratobj, file = "./Seuratobj_mouse.rds")
+Seuratobj <- readRDS("Seuratobj_mouse.rds")
+write.table(MG.de_lenient, file = "MG.de_lenient.txt", sep = "\t", quote = F, row.names = T, col.names = T)
+MG.de_lenient <- read.table("MG.de_lenient.txt", header = T, sep = "\t")
+max(MG.de_lenient$p_val_adj)
+```
+
+Convert to human genes 
+```{r}
+library(nichenetr)
+
+mouse_genes <-  rownames(MG.de_lenient)
+human_genes <- convert_mouse_to_human_symbols(mouse_genes)
+head(human_genes) # named vector
+genes_df_nn <- as.data.frame(human_genes) # convert to data frame
+genes_df_nn$mouseGenes <- names(human_genes) # add mouse gene symbols as column
+genes_df_nn <- genes_df_nn %>% add_column(orginal_genes = mouse_genes)
+```
+
+From Ensembl website  
+https://www.ensembl.info/2009/01/21/how-to-get-all-the-orthologous-genes-between-two-species/  
+```{r}
+ensembl_genes <- read.delim("Human_mouse_homologues.txt")
+mouse_genes <-  rownames(MG.de_lenient) %>% as.data.frame()
+genes_df <- mouse_genes %>% left_join(ensembl_genes, by = c("." = "Mouse.gene.name")) 
+names(genes_df) <- c("mouse_gene", "Gene.stable.ID", "Gene.stable.ID.version", "human_gene")
+genes_df <- genes_df %>% dplyr::select(mouse_gene, human_gene)
+```
+
+Concatenate two separate dfs and filter out duplicates or fill in missing values of the first column (will be used for gene names)
+```{r}
+genes_df <- genes_df %>% full_join(genes_df_nn, by = c("mouse_gene" = "orginal_genes"))
+genes_df <- genes_df %>% dplyr::select(-mouseGenes)
+genes_df
+genes_df[1,2] <- "PF4"
+genes_df <- genes_df %>% dplyr::slice(-c(11,12))
+genes_df <- genes_df %>% dplyr::slice(-c(15))
+genes_df[35,2] <- "PILRA"
+genes_df[36,2] <- "LILRB4"
+genes_df[43,2] <- "FXYD5"
+genes_df <- genes_df %>% dplyr::slice(-c(57))
+genes_df[76,2] <- "CXCL3"
+genes_df <- genes_df %>% dplyr::slice(-c(83))
+genes_df <- genes_df %>% dplyr::slice(-c(87))
+genes_df <- genes_df %>% dplyr::slice(-c(91,92))
+genes_df <- genes_df %>% dplyr::slice(-c(92))
+genes_df[98,2] <- "CTSV"
+genes_df[101,2] <- "RPL36A"
+genes_df[104,2] <- "RPL31"
+genes_df[109,2] <- "RPS2"
+genes_df[117,2] <- "RPL36"
+genes_df[119,2] <- "RPL9"
+genes_df[122,2] <- "RPS24"
+genes_df[129,2] <- "RPS25"
+genes_df[139,2] <- "RPL17"
+genes_df[146,2] <- "RPL27A"
+genes_df[147,2] <- "RPLP0"
+genes_df[150,2] <- "RPS4Y1"
+genes_df[157,2] <- "RPL21"
+genes_df[169,2] <- "RPL10"
+genes_df[174,2] <- "RPL41"
+genes_df[182,2] <- "RPS27"
+genes_df[185,2] <- "FTH1"
+genes_df[187,2] <- "EEF1A1"
+genes_df[206,2] <- "FAM102B"
+```
+
+Adap2os, Sepp1, Rpl23a, BC035044, Gm10036 in neither datasets a human homologue was found. 
+
+filter for protein coding genes 
+```{r}
+mart <- useMart(biomart = "ENSEMBL_MART_ENSEMBL", dataset = "mmusculus_gene_ensembl", host = 'https://www.ensembl.org')
+genes_ENSID <- biomaRt::getBM(attributes = c("mgi_symbol", "ensembl_gene_id", 
+                                             "transcript_biotype"), 
+                              filters = c("transcript_biotype"), 
+                              values = list("protein_coding"), mart = mart)
+genes_df <- genes_df %>%
+  dplyr::filter(mouse_gene %in% genes_ENSID$mgi_symbol)
+```
+
+```{r}
+genes_df
+genes_df <- genes_df %>% dplyr::slice(-c(66, 69))
+genes_df[206,2] <- "CFH"
+genes_df[224,2] <- "RPL5"
+genes_df <- genes_df %>% dplyr::slice(-c(268))
+genes_df <- genes_df %>% dplyr::slice(-c(269, 270))
+genes_df[274,2] <- "YBX1"
+genes_df <- genes_df %>% dplyr::slice(-c(282))
+genes_df[293,2] <- "CD68"
+genes_df[313,2] <- "GNG5"
+genes_df[326,2] <- "PILRB"
+genes_df[332,2] <- "HLA-A"
+genes_df[357,2] <- "CCL5"
+genes_df[383,2] <- "RAB32"
+genes_df <- genes_df %>% dplyr::slice(-c(466))
+genes_df <- genes_df %>% dplyr::slice(-c(472))
+genes_df[472,2] <- "VNN3"
+genes_df[479,2] <- "RPL15"
+genes_df[493,2] <- "LIMS1"
+genes_df <- genes_df %>% dplyr::slice(-c(494))
+genes_df <- genes_df %>% dplyr::slice(-c(496))
+genes_df[522,2] <- "LYZ"
+genes_df[534,2] <- "SERF2"
+genes_df <- genes_df %>% dplyr::slice(-c(591))
+genes_df <- genes_df %>% dplyr::slice(-c(610))
+genes_df[615,2] <- "HHEX"
+genes_df[625,2] <- "GPR84"
+genes_df[641,2] <- "IFI27"
+genes_df[716,2] <- "ATP5L"
+genes_df <- genes_df %>% dplyr::slice(-c(717))
+genes_df[769,2] <- "NSA2"
+genes_df[786,2] <- "ZNF710"
+genes_df[805,2] <- "CXCL2"
+genes_df <- genes_df %>% dplyr::slice(-c(854))
+genes_df[869,2] <- "ABCG2"
+genes_df[898,2] <- "EIF4B"
+genes_df <- genes_df %>% dplyr::slice(-c(920))
+genes_df[986,2] <- "HLA-DRB5"
+genes_df[1011,2] <- "LGALS9"
+genes_df <- genes_df %>% dplyr::slice(-c(1012,1013))
+genes_df <- genes_df %>% dplyr::slice(-c(1072,1073))
+genes_df[1094,2] <- "PILRB"
+genes_df <- genes_df %>% dplyr::slice(-c(1095))
+genes_df[1169,2] <- "PEBP1"
+genes_df <- genes_df %>% dplyr::slice(-c(1173))
+genes_df <- genes_df %>% dplyr::slice(-c(1210))
+genes_df <- genes_df %>% dplyr::slice(-c(1245))
+genes_df <- genes_df %>% dplyr::slice(-c(1271,1272,1274))
+genes_df <- genes_df %>% dplyr::slice(-c(1298))
+genes_df <- genes_df %>% dplyr::slice(-c(1299))
+genes_df[1306,2] <- "TNFSF13"
+genes_df[1384,2] <- "NAIP"
+genes_df[1387,2] <- "GIMAP7"
+genes_df[1390,2] <- "RNF135"
+genes_df <- genes_df %>% dplyr::slice(-c(1394))
+genes_df[1464,2] <- "POLR3GL"
+genes_df[1481,2] <- "CCDC163"
+genes_df[1486,2] <- "GNAQ"
+genes_df <- genes_df %>% dplyr::slice(-c(1518))
+genes_df <- genes_df %>% dplyr::slice(-c(1535,1537))
+genes_df <- genes_df %>% dplyr::slice(-c(1589,1590))
+genes_df <- genes_df %>% dplyr::slice(-c(1624,1626,1627))
+genes_df[1760,2] <- "TICAM2"
+genes_df <- genes_df %>% dplyr::slice(-c(1771))
+genes_df[1811,2] <- "PCP4"
+genes_df[1890,2] <- "ZNF226"
+genes_df <- genes_df %>% dplyr::slice(-c(1892))
+genes_df <- genes_df %>% dplyr::slice(-c(1934,1936))
+genes_df[1936,2] <- "HLA-A"
+genes_df <- genes_df %>% dplyr::slice(-c(1940))
+genes_df <- genes_df %>% dplyr::slice(-c(1955))
+genes_df[2042,2] <- "MT3"
+genes_df <- genes_df %>% dplyr::slice(-c(2099))
+genes_df <- genes_df %>% dplyr::slice(-c(2130))
+genes_df[2158,2] <- "DDX43"
+genes_df[2184,2] <- "ATAD2"
+genes_df <- genes_df %>% dplyr::slice(-c(2201))
+genes_df <- genes_df %>% dplyr::slice(-c(2218))
+genes_df[2240,2] <- "CASZ1"
+dim(genes_df)
+```
+
+Rpl23a, BC035044, Tmsb10, Ctla2b, Gm11808, Rpl10-ps3, C130050O18Rik, Oasl2, Gm3488, Ngp, 	Rpl9-ps6, Gm3739, Gm4951, Ifi47, H2-Aa, Gm6133, Gm2237, Gm3164, Nradd, Cbr2, Tlr12, Ctla2a, Gm3667, Gm8369, Zfp658, Wfdc21, Gpr165, Klra17, Ccdc162, Cmah, Trem3, Fbxw17, 4930486L24Rik, Naip5, Ifi27l2a, Gm3411, Wfdc17, 2610042L04Rik, Rasl2-9, F830016B08Rik, Hmgb3, 2010315B03Rik, Cetn4, Naip6, 2010109A12Rik, Tspyl3, Gm3604 --> no homologues 
+
+```{r}
+genes_df <- genes_df %>% dplyr::select(mouse_gene, human_gene)
+MG.de_lenient_human <- unique(genes_df$human_gene)
+length(MG.de_lenient_human)
+MG.de_lenient_human <- MG.de_lenient_human[!is.na(MG.de_lenient_human)] # remove NA
+```
+
+# Compare DEGs to regulons of SCENIC networks
+## Load data
+```{r}
+edgelist_AD <- read.table("../single-cell/edgelist_sc_AD.txt", header = T, sep = "\t")
+IRF8_reg_AD <- edgelist_AD %>% filter(regulator == "IRF8")
+edgelist_MDD <- read.table("../single-cell/edgelist_sc_MDD.txt", header = T, sep = "\t")
+IRF8_reg_MDD <- edgelist_MDD %>% filter(regulator == "IRF8")
+```
+
+```{r}
+length(intersect(IRF8_reg_AD$gene, MG.de_lenient_human))
+length(intersect(IRF8_reg_MDD$gene, MG.de_lenient_human)) 
+```
+
+## Enrichment of DEGs in regulons
+https://search.r-project.org/CRAN/refmans/NetSci/html/Hypergeometric.test.html 
+https://stats.stackexchange.com/questions/16247/calculating-the-probability-of-gene-list-overlap-between-an-rna-seq-and-a-chip-c/16259#16259  
+```{r}
+#install.packages("NetSci")
+library(NetSci)
+```
+
+```{r}
+head(IRF8_reg_AD)
+head(MG.de_lenient_human)
+
+success <- length(intersect(IRF8_reg_AD$gene, MG.de_lenient_human))
+set_interest <- length(unique(IRF8_reg_AD$gene)) 
+set_geneset <- length(unique(MG.de_lenient_human))
+total <- length( union( unique(tolower(edgelist_AD$gene)), unique(tolower(rownames(MG.de))) ) ) 
+p_value <- phyper(q = success-1, 
+                  m = set_interest,  
+                  n = total-set_interest,
+                  k = set_geneset,
+                  lower.tail = FALSE)
+
+p_value <- as.numeric(p_value)
+p_value # 6.553656e-43
+```
+
+```{r}
+head(IRF8_reg_MDD)
+head(MG.de_lenient_human)
+
+success <- length(intersect(IRF8_reg_MDD$gene, MG.de_lenient_human)) 
+set_interest <- length(unique(IRF8_reg_MDD$gene)) 
+set_geneset <- length(unique(MG.de_lenient_human)) 
+total <- length( union( unique(tolower(edgelist_MDD$gene)), tolower(unique(rownames(MG.de))) ) ) 
+p_value <- phyper(q = success-1, 
+                  m = set_interest,  
+                  n = total-set_interest,
+                  k = set_geneset,
+                  lower.tail = FALSE)
+
+p_value <- as.numeric(p_value)
+p_value # 4.682952e-15
+```
+
+```{r}
+write.table(genes_df, file = "Mouse_human_genes_DEGs.txt", sep = "\t", row.names = F, quote = F, col.names = T)
+```
+
+# Venn diagrams of overlap 
+```{r}
+genes_df <- read.table(file = "Mouse_human_genes_DEGs.txt", sep = "\t", header = T)
+MG.de_lenient_human <- unique(genes_df$human_gene)
+length(MG.de_lenient_human)
+MG.de_lenient_human <- MG.de_lenient_human[!is.na(MG.de_lenient_human)] # remove NA
+```
+
+```{r}
+length(IRF8_reg_AD$gene) # 938
+length(IRF8_reg_MDD$gene) # 142
+length(MG.de_lenient_human) # 2171
+length(intersect(IRF8_reg_AD$gene, MG.de_lenient_human)) # 333
+length(intersect(IRF8_reg_MDD$gene, MG.de_lenient_human)) # 69
+length(intersect(IRF8_reg_AD$gene, IRF8_reg_MDD$gene)) # 123
+length(intersect(intersect(IRF8_reg_AD$gene, IRF8_reg_MDD$gene), MG.de_lenient_human)) # 68
+```
+
+```{r}
+library(VennDiagram)
+```
+
+```{r fig.width=8, fig.height=8}
+grid.newpage()
+pdf("IRF8regulon_both_Irf8KO.pdf", 
+    width = 8, height = 8, 
+    family = "ArialMT")
+draw.triple.venn(area1 = 938, # AD regulon
+                 area2 = 142, # MDD regulon
+                 area3 = 2171, # Irf8 KO DEGs
+                 n12 = 123, 
+                 n23 = 69,
+                 n13 = 333,
+                 n123 = 68,
+                 fill = c('#99DDFF', '#44BB99', '#EEDD88'), 
+                 category = c("IRF8 regulon \n AD", "IRF8 regulon \n MDD", "Irf8 KO DEGs"), 
+                 lty = "blank", cat.cex = 3, cex = 3.5)
+dev.off()
+```

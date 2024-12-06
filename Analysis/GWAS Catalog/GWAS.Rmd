@@ -1,0 +1,339 @@
+---
+title: "GWAS AD and MDD"
+author: "Hanne Puype"
+date: "2022-12-06"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+    df_print: "paged"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Load datasets 
+AD: https://www.ebi.ac.uk/gwas/efotraits/MONDO_0004975  
+unipolar depression: https://www.ebi.ac.uk/gwas/efotraits/EFO_0003761  
+
+Some information:  
+REPORTED GENE: Gene(s) reported by the author; "intergenic" is used to denote a reported intergenic location (or lack of gene if it appeared that gene information was sought); “NR” is used to denote that no gene location information was reported.  
+MAPPED GENE(S): Gene(s) mapped to the strongest SNP. If the SNP is located within a gene, that gene is listed, with multiple overlapping genes separated by “, ”. If the SNP is intergenic, the upstream and downstream genes are listed, separated by “ - ”.  
+
+```{r}
+library(tidyverse)
+gwas_AD <- read.delim("gwas-association-downloaded_2022-12-06-AD.tsv")
+colnames(gwas_AD)
+gwas_AD <- gwas_AD %>% select(CHR_POS, REGION, REPORTED.GENE.S., MAPPED_GENE, UPSTREAM_GENE_ID,
+                              UPSTREAM_GENE_DISTANCE, DOWNSTREAM_GENE_ID, DOWNSTREAM_GENE_DISTANCE, 
+                              SNPS, P.VALUE, everything())
+head(gwas_AD)
+tail(gwas_AD)
+```
+
+```{r}
+gwas_MDD <- read.delim("gwas-association-downloaded_2022-12-06-MDD.tsv")
+gwas_MDD <- gwas_MDD %>% select(CHR_POS, REGION, REPORTED.GENE.S., MAPPED_GENE, UPSTREAM_GENE_ID,
+                                UPSTREAM_GENE_DISTANCE,  DOWNSTREAM_GENE_ID, DOWNSTREAM_GENE_DISTANCE, 
+                                SNPS, P.VALUE, everything())
+head(gwas_MDD)
+```
+
+If in gene, take this gene, if upstream of gene of interest, max distance of 3000 (same as RSAT). Reported gene could be in previous genome gene symbol, mapped gene should be in hg38. 
+
+# Load in modules  
+```{r}
+modulesAD <- read.table("kmed_modules_AD.txt", header = F, sep = "\t")
+modulesMDD <- read.table("kmed_modules_MDD.txt", header = F, sep = "\t")
+colnames(modulesAD) <- c("Gene", "Module")
+colnames(modulesMDD) <- c("Gene", "Module")
+```
+
+# Immune modules 
+```{r}
+mod22 <- modulesAD %>% filter(Module == 22)
+mod24 <- modulesMDD %>% filter(Module == 24)
+mod39 <- modulesAD %>% filter(Module == 39)
+mod141 <- modulesAD %>% filter(Module == 141)
+mod37 <- modulesMDD %>% filter(Module == 37)
+mod63 <- modulesMDD %>% filter(Module == 63)
+mod81 <- modulesMDD %>% filter(Module == 81)
+```
+
+I need to extract the rows from the gwas dataset that contain the genes from the modules above. I will do this with 'MAPPED_GENE'.  
+```{r}
+gwas_AD_22 <- gwas_AD %>% filter(str_detect(MAPPED_GENE, paste(mod22$Gene, collapse="|")))
+gwas_AD_39 <- gwas_AD %>% filter(str_detect(MAPPED_GENE, paste(mod39$Gene, collapse="|")))
+gwas_AD_141 <- gwas_AD %>% filter(str_detect(MAPPED_GENE, paste(mod141$Gene, collapse="|")))
+gwas_MDD_24 <- gwas_MDD %>% filter(str_detect(MAPPED_GENE, paste(mod24$Gene, collapse="|")))
+gwas_MDD_63 <- gwas_MDD %>% filter(str_detect(MAPPED_GENE, paste(mod63$Gene, collapse="|")))
+gwas_MDD_81 <- gwas_MDD %>% filter(str_detect(MAPPED_GENE, paste(mod81$Gene, collapse="|")))
+```
+
+Now inspect the results 
+```{r}
+gwas_AD_22
+```
+TBXAS1, INPP5D, HAVCR2,  HLA-DQA1, CD33, ITGAX, RUNX2, SCIN, HLA-DRA  
+SNP in gene: TBXAS1, INPP5D, HAVCR2, CD33, ITGAX, HLA-DQA1  
+upstream of gene: CD33  
+HLA-DQA1, SCIN, HLA-DRA have SNP upstream, but too far  
+RUNX2, HLA-DRA have SNP downstream   
+
+```{r}
+gwas_AD_39
+```
+DISC1, MS4A6A, PIK3CG, ABI3, MSR1, PLCG2, WDFY4, LILRB2, BLNK  
+SNP in gene: DISC1, ABI3, MS4A6A, MSR1, WDFY4, PLCG2, BLNK  
+SNP upstream of gene: MS4A6A  
+MS4A6A, LILRB2 have SNP upstream, but too far  
+PIK3CG has SNP downstream 
+
+```{r}
+gwas_AD_141
+```
+HLA-DRB1, MAF  
+SNP in gene: HLA-DRB1  
+MAF: SNP upstream, but too far  
+
+```{r}
+gwas_MDD_24
+```
+HLA-DRB1, SERPINA1, FCGR2A, KCTD12  
+SERPINA1, FCGR2A have SNP upstream, but too far  
+HLA-DRB1, KCTD12 have SNP downstream  
+
+```{r}
+gwas_MDD_37
+```
+LY75, NFAM1, CSF3R, KCNQ1  
+SNP in gene: LY75, NFAM1, KCNQ  
+CSF3R: downstream SNP  
+
+```{r}
+gwas_MDD_63
+```
+DOCK8, FYB, LPAR6, LY86, TAL1  
+SNP in gene: DOCK8, FYB, LPAR6, TAL1  
+LY86: SNP downstream  
+
+```{r}
+gwas_MDD_81
+```
+LILRA1, TFEC, CLEC17A, HLA-DMB  
+SNP in gene: LILRA1, TFEC, CLEC17A  
+HLA-DMB: SNP downstream  
+
+# Significant modules 
+AD: 26, 35, 60, 66, 153  
+MDD: 36, 44, 49, 93, 110, 115
+```{r}
+mod26 <- modulesAD %>% filter(Module == 26)
+mod35 <- modulesAD %>% filter(Module == 35)
+mod60 <- modulesAD %>% filter(Module == 60)
+mod66 <- modulesAD %>% filter(Module == 66)
+mod153 <- modulesAD %>% filter(Module == 153)
+mod51 <- modulesAD %>% filter(Module == 51)
+gwas_AD_26 <- gwas_AD %>% filter(str_detect(MAPPED_GENE, paste(mod26$Gene, collapse="|")))
+gwas_AD_35 <- gwas_AD %>% filter(str_detect(MAPPED_GENE, paste(mod35$Gene, collapse="|")))
+gwas_AD_60 <- gwas_AD %>% filter(str_detect(MAPPED_GENE, paste(mod60$Gene, collapse="|")))
+gwas_AD_66 <- gwas_AD %>% filter(str_detect(MAPPED_GENE, paste(mod66$Gene, collapse="|")))
+gwas_AD_153 <- gwas_AD %>% filter(str_detect(MAPPED_GENE, paste(mod153$Gene, collapse="|")))
+gwas_AD_51 <- gwas_AD %>% filter(str_detect(MAPPED_GENE, paste(mod51$Gene, collapse="|")))
+```
+
+```{r}
+gwas_AD_26
+```
+SORL1, RAB1A, DLG2  
+SNP in gene: SORL1, DLG2  
+RAB1A has SNP downstream  
+
+```{r}
+gwas_AD_35
+```
+LAMP1, ADAMTS4, FRMD5, MOG, PDE8A, PDE4B  
+SNP in genes: LAMP1, ADAMTS4, FRMD5, PDE8A, PDE4B  
+PROX1 has SNP downstream   
+MOG has SNP upstream, but too far  
+
+```{r}
+gwas_AD_60
+```
+PSMC6, BNIP3, MAPT, C12orf65, ENOPH1  
+SNP in gene: MAPT, C12orf65, ENOPH1  
+PSMC6 has SNP upstream, but too far  
+BNIP3 has SNP downstream  
+
+```{r}
+gwas_AD_66
+```
+SESTD1, NKAIN2, MTMR2, RAC1, CTSB, YWHAQ, HS3ST5  
+SNP in gene: SESTD1, NKAIN2, MTMR2, RAC1, CTSB, HS3ST5  
+SESTD1, MTMR2 have SNP downstream  
+YWHAQ has SNP upstream, but too far  
+
+```{r}
+gwas_AD_153
+```
+SERPINE1, TNXB, PHF21B, COL27A1  
+SNP in gene: TNXB, PHF21B  
+SERPINE1, COL27A1 have SNP upstream, but too far  
+
+```{r}
+gwas_AD_51
+```
+HGF: upstream SNP, but too far away  
+
+
+MDD
+```{r}
+mod36 <- modulesMDD %>% filter(Module == 36)
+mod44 <- modulesMDD %>% filter(Module == 44)
+mod49 <- modulesMDD %>% filter(Module == 49)
+mod93 <- modulesMDD %>% filter(Module == 93)
+mod110 <- modulesMDD %>% filter(Module == 110)
+mod115 <- modulesMDD %>% filter(Module == 115)
+gwas_MDD_36 <- gwas_MDD %>% filter(str_detect(MAPPED_GENE, paste(mod36$Gene, collapse="|")))
+gwas_MDD_44 <- gwas_MDD %>% filter(str_detect(MAPPED_GENE, paste(mod44$Gene, collapse="|")))
+gwas_MDD_49 <- gwas_MDD %>% filter(str_detect(MAPPED_GENE, paste(mod49$Gene, collapse="|")))
+gwas_MDD_93 <- gwas_MDD %>% filter(str_detect(MAPPED_GENE, paste(mod93$Gene, collapse="|")))
+gwas_MDD_110 <- gwas_MDD %>% filter(str_detect(MAPPED_GENE, paste(mod110$Gene, collapse="|")))
+gwas_MDD_115 <- gwas_MDD %>% filter(str_detect(MAPPED_GENE, paste(mod115$Gene, collapse="|")))
+```
+
+```{r}
+gwas_MDD_36
+```
+OSMR: SNP in gene  
+
+```{r}
+gwas_MDD_44
+```
+TTPA, ACSS3, TLR4, GPC5, STK17B, ACAA2, RNF182  
+SNP in gene: ACSS3, GPC5, TLR4  
+TTPA, TLR4 have SNP downstream  
+STK17B, ACAA2, RNF182 have SNP upstream, but too far  
+
+```{r}
+gwas_MDD_49
+```
+CABP1: SNP upstream, but too far  
+
+```{r}
+gwas_MDD_93
+```
+FAT1, C3orf70, NTRK2, ALDH1A1, MCC, PTAR1  
+SNP in gene: FAT1, NTRK2, MCC, PTAR1  
+C3orf70, ALDH1A1 have SNP downstream  
+
+```{r}
+gwas_MDD_110
+```
+/  
+
+```{r}
+gwas_MDD_115
+```
+ANXA1: SNP upstream  
+
+# Enrichment Webgestalt
+## AD 
+Make input genes: all genes with SNP upstream or intragenic for that disease  
+```{r}
+gwas_AD_u <- gwas_AD[!duplicated(gwas_AD[, 4]),]
+```
+I still have 1634 rows, I cannot check this manually 
+
+Or I can select the rows where there is no upstream nor downstream gene for the intragenic SNPs
+And the other way around for the intergenic SNPs, Which I will need to check 
+```{r}
+gwas_AD_u_g <- gwas_AD_u %>% filter(UPSTREAM_GENE_ID == "" & DOWNSTREAM_GENE_ID == "")
+dim(gwas_AD_u_g)
+gwas_AD_u_i <- gwas_AD_u %>% filter(UPSTREAM_GENE_ID != "" | DOWNSTREAM_GENE_ID != "")
+dim(gwas_AD_u_i)
+```
+
+```{r}
+gwas_AD_u_g[c("first_gene", "second_gene", "third gene")] <- str_split_fixed(gwas_AD_u_g$MAPPED_GENE, 
+                                                               pattern = ', ', n = 3)
+gwas_AD_u_g <- gwas_AD_u_g %>% select(CHR_POS, REGION, REPORTED.GENE.S., first_gene, second_gene, 
+                                      "third gene", everything())
+intragenic_genes_AD <- c(gwas_AD_u_g$first_gene, gwas_AD_u_g$second_gene)
+length(intragenic_genes_AD)
+intragenic_genes_AD <- unique(intragenic_genes_AD)
+length(intragenic_genes_AD)
+```
+
+So I will need to check 652 genes manually  
+Maybe I can filter some more
+Only upstream SNPs with max 3kb upstream 
+```{r}
+gwas_AD_u_i <- gwas_AD_u_i %>% filter(DOWNSTREAM_GENE_DISTANCE < 3000)
+dim(gwas_AD_u_i)
+```
+Only 67 left!  
+I only need to keep the second gene for the list, so I will split them into two columns  
+```{r}
+gwas_AD_u_i[c("first_gene", "second_gene")] <- str_split_fixed(gwas_AD_u_i$MAPPED_GENE, 
+                                                               pattern = ' - ', n = 2)
+gwas_AD_u_i <- gwas_AD_u_i %>% select(CHR_POS, REGION, REPORTED.GENE.S., first_gene, second_gene, 
+                                      everything())
+head(gwas_AD_u_i)
+upstream_genes_AD <-gwas_AD_u_i$second_gene
+length(upstream_genes_AD)
+```
+
+```{r}
+gwas_genes_AD <- c(intragenic_genes_AD, upstream_genes_AD)
+length(gwas_genes_AD)
+gwas_genes_AD <- as.matrix(gwas_genes_AD)
+gwas_genes_AD <- as.data.frame(gwas_genes_AD)
+gwas_genes_AD <- gwas_genes_AD %>% filter(gwas_genes_AD != "")
+write.table(gwas_genes_AD, file = "C:/PhD_22-23/Analyses/R/gwas_genes_AD.txt", row.names = F, 
+            col.names = F, quote = F)
+```
+
+## MDD 
+```{r}
+gwas_MDD_u <- gwas_MDD[!duplicated(gwas_MDD[, 4]),]
+dim(gwas_MDD_u)
+gwas_MDD_u_g <- gwas_MDD_u %>% filter(UPSTREAM_GENE_ID == "" & DOWNSTREAM_GENE_ID == "")
+dim(gwas_MDD_u_g)
+gwas_MDD_u_i <- gwas_MDD_u %>% filter(UPSTREAM_GENE_ID != "" | DOWNSTREAM_GENE_ID != "")
+dim(gwas_MDD_u_i)
+```
+
+```{r}
+gwas_MDD_u_g[c("first_gene", "second_gene", "third gene")] <- str_split_fixed(gwas_MDD_u_g$MAPPED_GENE,                                                               pattern = ', ', n = 3)
+gwas_MDD_u_g <- gwas_MDD_u_g %>% select(CHR_POS, REGION, REPORTED.GENE.S., first_gene, second_gene, 
+                                      "third gene", everything())
+intragenic_genes_MDD <- c(gwas_MDD_u_g$first_gene, gwas_MDD_u_g$second_gene)
+length(intragenic_genes_MDD)
+intragenic_genes_MDD <- unique(intragenic_genes_MDD)
+length(intragenic_genes_MDD)
+```
+
+```{r}
+gwas_MDD_u_i <- gwas_MDD_u_i %>% filter(DOWNSTREAM_GENE_DISTANCE < 3000)
+dim(gwas_MDD_u_i)
+gwas_MDD_u_i[c("first_gene", "second_gene")] <- str_split_fixed(gwas_MDD_u_i$MAPPED_GENE, 
+                                                               pattern = ' - ', n = 2)
+gwas_MDD_u_i <- gwas_MDD_u_i %>% select(CHR_POS, REGION, REPORTED.GENE.S., first_gene, second_gene, 
+                                      everything())
+head(gwas_MDD_u_i)
+upstream_genes_MDD <-gwas_MDD_u_i$second_gene
+length(upstream_genes_MDD)
+```
+
+```{r}
+gwas_genes_MDD <- c(intragenic_genes_MDD, upstream_genes_MDD)
+length(gwas_genes_MDD)
+gwas_genes_MDD <- as.matrix(gwas_genes_MDD)
+gwas_genes_MDD <- as.data.frame(gwas_genes_MDD)
+gwas_genes_MDD <- gwas_genes_MDD %>% filter(gwas_genes_MDD != "")
+write.table(gwas_genes_MDD, file = "C:/PhD_22-23/Analyses/R/gwas_genes_MDD.txt", row.names = F, 
+            col.names = F, quote = F)
+```
+

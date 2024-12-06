@@ -1,0 +1,123 @@
+---
+title: "ChIP-seq enrichment analysis"
+author: "Hanne Puype"
+date: "2023-05-11"
+output:   
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+output  
+module    gene|with|pipes   TF
+
+Two outputs: all TFs and the ones that are inferred
+
+# All modules 
+So i need to loop over all files, but as output i only need one file  
+```{r}
+reg_AD <- read.table("reg_clust_ens_AD.txt")
+names(reg_AD) <- c("TF", "Module")
+df_f <- data.frame(Module = numeric(0), genes = character(0), TF = character(0)) # empty df with three columns
+df_infer_f <- data.frame(Module = numeric(0), genes = character(0), TF = character(0))
+
+for (module in c(1:155)) {
+  enrich <- read.delim(paste0("C:/Users/hannepu/OneDrive - UGent/Master 2/Master's dissertation/Analysis/MotifEnrich_ens_ChIP/Enrichment_module",module,".txt"), 
+                       row.names = NULL)
+  enrich$Term <- sub(" .*", "", enrich$Term)
+  enrich <- enrich %>% select(Term, Genes)
+  
+  enrich[,paste0("gene", 1:50)] <- str_split_fixed(enrich$Genes, ";", 50)
+  enrich <- enrich %>% filter(Term != "Overlap")
+  enrich <- enrich %>% select(-Genes)
+  enrich <- enrich %>% arrange(Term)
+  enrich <- enrich[!duplicated(enrich), ]
+  enrich <- as.data.frame(enrich)
+  
+  my_list <- list()
+  for (TF in unique(enrich$Term)) {
+    TFs <- enrich %>% dplyr::filter(Term == TF)
+    a <- c()
+    for (i in 1:(dim(TFs)[1])) {
+      char_vec <- as.character(TFs[i, 1:50]) # first one is the TF
+      a <- c(a, char_vec)
+    }
+    a <- unique(a)
+    my_list <- c(my_list, TF = list(a))
+  }
+  
+  names(my_list) <- paste("TF", 1:length(my_list))
+  df <- data.frame(Value = sapply(my_list, paste, collapse = '|'))
+  df[,c("TF", "genes")] <- str_split_fixed(df$Value, "\\|", 2)
+  df <- df %>% add_column("Module" = module) %>% select(Module, genes, TF) 
+  df_f <- rbind(df_f, df)
+  
+  reg_of_int <- reg_AD %>% filter(Module == module)
+  reg_module <- as.character(reg_of_int$TF)
+  df_inferred <- df %>% filter(TF %in% reg_module)
+  df_infer_f <- rbind(df_infer_f, df_inferred)
+}
+df_f <- df_f %>% slice(-1)
+df_f <- df_f %>% filter(TF!= "Term")
+write.table(df_f, file = "ChIP_enrichR_all_AD.mvf", quote = F, sep = "\t", row.names = F, col.names = F)
+write.table(df_infer_f, file = "ChIP_enrichR_inferred_AD.mvf", quote = F, sep = "\t", row.names = F, col.names = F)
+```
+
+
+## MDD
+```{r}
+reg_MDD <- read.table("reg_clust_ens_MDD.txt")
+names(reg_MDD) <- c("TF", "Module")
+df_f <- data.frame(Module = numeric(0), genes = character(0), TF = character(0)) # empty df with three columns
+df_infer_f <- data.frame(Module = numeric(0), genes = character(0), TF = character(0))
+
+for (module in c(1:156)) {
+  enrich <- read.delim(paste0("C:/Users/hannepu/OneDrive - UGent/Master 2/Master's dissertation/Analysis/MotifEnrich_ens_ChIP/EnrichmentMDD_module",module,".txt"), 
+                       row.names=NULL)
+  enrich$Term <- sub(" .*", "", enrich$Term)
+  enrich <- enrich %>% select(Term, Genes)
+  
+  enrich[,paste0("gene", 1:50)] <- str_split_fixed(enrich$Genes, ";", 50)
+  enrich <- enrich %>% filter(Term != "Overlap")
+  enrich <- enrich %>% select(-Genes)
+  enrich <- enrich %>% arrange(Term)
+  enrich <- enrich[!duplicated(enrich), ]
+  enrich <- as.data.frame(enrich)
+  
+  my_list <- list()
+  for (TF in unique(enrich$Term)) {
+    TFs <- enrich %>% dplyr::filter(Term == TF)
+    a <- c()
+    for (i in 1:(dim(TFs)[1])) {
+      char_vec <- as.character(TFs[i, 1:50]) # first one is the TF
+      a <- c(a, char_vec)
+    }
+    a <- unique(a)
+    my_list <- c(my_list, TF = list(a))
+  }
+  
+  names(my_list) <- paste("TF", 1:length(my_list))
+  df <- data.frame(Value = sapply(my_list, paste, collapse = '|'))
+  df[,c("TF", "genes")] <- str_split_fixed(df$Value, "\\|", 2)
+  df <- df %>% add_column("Module" = module) %>% select(Module, genes, TF) 
+  df_f <- rbind(df_f, df)
+  
+  reg_of_int <- reg_MDD %>% filter(Module == module)
+  reg_module <- as.character(reg_of_int$TF)
+  df_inferred <- df %>% filter(TF %in% reg_module)
+  df_infer_f <- rbind(df_infer_f, df_inferred)
+}
+df_f <- df_f %>% slice(-1)
+df_f <- df_f %>% filter(TF!= "Term")
+write.table(df_f, file = "ChIP_enrichR_all_MDD.mvf", quote = F, sep = "\t", row.names = F, col.names = F)
+write.table(df_infer_f, file = "ChIP_enrichR_inferred_MDD.mvf", quote = F, sep = "\t", row.names = F, col.names = F)
+```
+

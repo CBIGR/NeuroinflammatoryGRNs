@@ -1,0 +1,393 @@
+---
+title: "Network characteristics of ensemble networks"
+author: "Hanne Puype"
+date: '2022-03-25'
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# How many genes per module
+```{r}
+library(tidyverse)
+modulesAD <- read.table("modules_AD.txt", header = F, sep = "\t")
+head(modulesAD)
+modulesAD %>% group_by(V2) %>% summarise(n())
+modulesMDD <- read.table("modules_MDD.txt", header = F, sep = "\t")
+head(modulesMDD)
+modulesMDD %>% group_by(V2) %>% summarise(n())
+```
+
+# Visualise modules in PCA plot
+```{r}
+countsAD <- read.table("Processed_counts_AD_GS.txt", sep = "\t", header = T)
+countsMDD <- read.table("Processed_counts_MDD_GS.txt", sep = "\t", header = T)
+nodesAD <- unique(modulesAD$V1)
+length(nodesAD)
+nodesMDD <- unique(modulesMDD$V1)
+countsAD <- countsAD %>% filter(GeneSymbol %in% nodesAD)
+dim(countsAD)
+tail(countsAD)
+countsMDD <- countsMDD %>% filter(GeneSymbol %in% nodesMDD)
+dim(countsMDD)
+```
+the genes are in the same order in the modules and in the counts  
+
+```{r}
+countsAD <- column_to_rownames(countsAD, "GeneSymbol")
+countsAD_t <- t(countsAD)
+pca <- prcomp(countsAD_t)
+modulesAD %>%
+  mutate(PC1 = pca$rotation[, 1], PC2 = pca$rotation[, 2]) %>%
+  ggplot(aes(x = PC1, y = PC2, colour = V2)) +
+        geom_point()
+```
+
+```{r}
+countsMDD <- column_to_rownames(countsMDD, "GeneSymbol")
+countsMDD_t <- t(countsMDD)
+pca <- prcomp(countsMDD_t)
+modulesMDD %>%
+  mutate(PC1 = pca$rotation[, 1], PC2 = pca$rotation[, 2]) %>%
+  ggplot(aes(x = PC1, y = PC2, colour = V2)) +
+        geom_point()
+```
+
+# Modules with jaccard index 
+k = 155 and 156  
+```{r}
+modulesAD <- read.table("kmed_modules_AD.txt", header = F, sep = "\t")
+head(modulesAD)
+modulesAD %>% group_by(V2) %>% summarise(n())
+modulesMDD <- read.table("kmed_modules_MDD.txt", header = F, sep = "\t")
+head(modulesMDD)
+modulesMDD %>% group_by(V2) %>% summarise(n())
+```
+module 28 of AD has 1162 genes  
+module 5 of MDD has 1086 genes
+
+
+# Hubs in network
+```{r}
+network_AD <- read.table("ensemble_netw_AD.txt", header = T, sep = "\t")
+head(network_AD)
+regAD <- network_AD$TF 
+regAD <- as.data.frame(table(regAD)) # frequency TF --> ~ out-degree
+regAD <- regAD %>% arrange(desc(Freq))
+head(regAD)
+regAD$regAD <- as.character(regAD$regAD) # are factors
+```
+
+```{r}
+network_MDD <- read.table("ensemble_netw_MDD.txt", header = T, sep = "\t")
+head(network_MDD)
+regMDD <- network_MDD$TF 
+regMDD <- as.data.frame(table(regMDD))
+regMDD <- regMDD %>% arrange(desc(Freq))
+head(regMDD)
+regMDD$regMDD <- as.character(regMDD$regMDD)
+```
+
+
+```{r}
+regAD <- regAD %>% slice(c(1:100)) %>% select(regAD)
+regAD <- regAD$regAD
+print(regAD, quote = F)
+write.table(regAD, file = "Hubs_AD_bulk.txt", sep = "\t")
+regMDD <- regMDD %>% slice(c(1:100)) %>% select(regMDD)
+regMDD <- regMDD$regMDD
+print(regMDD, quote = F)
+write.table(regMDD, file = "Hubs_MDD_bulk.txt", sep = "\t")
+common_reg <- Reduce(intersect, list(regAD, regMDD)) 
+length(common_reg)
+print(common_reg, quote = F)
+```
+
+
+# Visualisation 
+```{r fig.width=10}
+library(igraph)
+igraph_options(annotate.plot = T)
+graph_AD <- graph_from_data_frame(network_AD, directed = T)
+graph_MDD <- graph_from_data_frame(network_MDD, directed = T)
+pdf("graph_AD_ens.pdf", 
+    width = 9, height = 8, 
+    family = "ArialMT")
+plot(graph_AD, vertex.label = NA, main = "Graph of ensemble network of AD", vertex.color = "#88CCEE")
+dev.off()
+pdf("graph_MDD_ens.pdf", 
+    width = 9, height = 8, 
+    family = "ArialMT")
+plot(graph_MDD, vertex.label = NA, main = "Graph of ensemble network of MDD", vertex.color = "#88CCEE")
+dev.off()
+```
+
+# Compare networks with Jaccard index
+Jaccard Similarity = (number of observations in both sets) / (number in either set)  
+https://www.statology.org/jaccard-similarity-in-r/  
+
+## Jaccard similarity index
+```{r}
+jaccard <- function(a, b) {
+    intersection = length(intersect(a, b))
+    union = length(a) + length(b) - intersection
+    return (intersection/union)
+}
+```
+
+Edge list 
+```{r}
+head(network_AD)
+network_AD$concat <- paste(network_AD$TF, network_AD$Target_gene, sep = ":")
+network_MDD$concat <- paste(network_MDD$TF, network_MDD$Target_gene, sep = ":")
+edgesAD <- network_AD$concat
+edgesMDD <- network_MDD$concat
+```
+
+```{r}
+jaccard(edgesAD, edgesMDD)
+```
+the higher the number, the more similar  
+
+## Jaccard distance
+```{r}
+1- jaccard(edgesAD, edgesMDD)
+```
+
+```{r}
+length(union(edgesAD, edgesMDD)) # all edges of both networks
+length(intersect(edgesAD, edgesMDD)) # common edges
+```
+
+## Venn diagram of overlap
+```{r}
+library("ggvenn")
+x <- list(edgesAD, edgesMDD)
+names(x) <- c("AD","MDD")
+ggvenn(
+  x, show_percentage = F, 
+  fill_color = c("#0073C2FF", "#CD534CFF"),
+  stroke_size = 0.5, set_name_size = 7, text_size = 6) + 
+  labs(title = "Venn diagram for overlap ensemble networks")
+```
+
+## Ranks of overlapping edges
+```{r}
+intersec_AD_MDD <- intersect(edgesAD, edgesMDD)
+network_AD_shared <- network_AD %>% filter(concat %in% intersec_AD_MDD)
+dim(network_AD_shared)
+head(network_AD_shared)
+mean(network_AD_shared$Rank)
+median(network_AD_shared$Rank)
+hist(network_AD_shared$Rank, breaks = 35, main = "Rank of shared edges of AD network", xlab = "Rank")
+
+network_MDD_shared <- network_MDD %>% filter(concat %in% intersec_AD_MDD)
+dim(network_MDD_shared)
+head(network_MDD_shared)
+mean(network_MDD_shared$Rank)
+median(network_MDD_shared$Rank)
+hist(network_MDD_shared$Rank, breaks = 35, main = "Rank of shared edges of MDD network", xlab = "Rank")
+```
+
+# Annotation for ModuleViewer  
+## AD 
+```{r}
+annotation_AD <- read.delim("C:/UGent/Master 2/Master's dissertation/R/Lemon-Tree/annotation_AD.txt")
+head(annotation_AD)
+annotation_AD$Diagnosis <- as.factor(annotation_AD$Diagnosis)
+annotation_AD$Sex <- as.factor(annotation_AD$Sex)
+annotation_AD$Tangle.Stage <- as.factor(annotation_AD$Tangle.Stage)
+annotation_AD$Plaque.Stage <- as.factor(annotation_AD$Plaque.Stage)
+annotation_AD$Neuropath.Dx.1 <- as.factor(annotation_AD$Neuropath.Dx.1)
+levels(annotation_AD$Diagnosis) #2
+levels(annotation_AD$Neuropath.Dx.1) #4
+levels(annotation_AD$Sex) #2
+levels(annotation_AD$Tangle.Stage) #6
+levels(annotation_AD$Plaque.Stage) #4
+```
+
+Diagnosis
+```{r}
+annotation_AD$col <- factor(annotation_AD$Diagnosis, levels=c("AD","Control"), 
+                         labels=c("#eb764f","#44BB99"))
+annotation_AD$cond <- paste(annotation_AD$Sample, annotation_AD$col, sep=":")
+head(annotation_AD)
+annot_AD <- t(annotation_AD[,8])
+write.table(annot_AD, file = "ModuleViewer/Ens_Anno_Diagn_AD", quote = F, sep = '|', na = "", row.names = F,
+            col.names = F)
+```
+
+Sex
+```{r}
+annotation_AD$col <- factor(annotation_AD$Sex, levels=c("male","female"), 
+                         labels=c("#99DDFF","#FFAABB"))
+annotation_AD$cond <- paste(annotation_AD$Sample, annotation_AD$col, sep=":")
+head(annotation_AD)
+annot_AD <- t(annotation_AD[,8])
+write.table(annot_AD, file = "ModuleViewer/Ens_Anno_Sex_AD", quote = F, sep = '|', na = "", row.names = F,
+            col.names = F)
+```
+
+Neuropath.Dx.1
+```{r}
+annotation_AD$col <- factor(annotation_AD$Neuropath.Dx.1, levels=c("Alzheimer's disease",
+                                                                   "Normal (Mild Braak Changes)", 
+                                                                   "Normal - No Pathology Detected", 
+                                                                   "Normal (Mild Vascular Changes)"), 
+                         labels=c("#004C99", "#0080FF", "#FFFFFF", "#99CCFF"))
+annotation_AD$cond <- paste(annotation_AD$Sample, annotation_AD$col, sep=":")
+head(annotation_AD)
+annot_AD <- t(annotation_AD[,8])
+write.table(annot_AD, file = "ModuleViewer/Ens_Anno_Neuropath_AD", quote = F, sep = '|', na = "", row.names = F,
+            col.names = F)
+```
+
+Tangle Stage
+```{r}
+annotation_AD$col <- factor(annotation_AD$Tangle.Stage, levels=c("Stage 1","Stage 2", "Stage 3", "Stage 4",
+                                                                 "Stage 5", "Stage 6"), 
+                         labels=c("#FFFFFF", "#CCFFCC", "#66FF66", "#00CC00", "#009900", "#006600"))
+annotation_AD$cond <- paste(annotation_AD$Sample, annotation_AD$col, sep=":")
+head(annotation_AD)
+annot_AD <- t(annotation_AD[,8])
+write.table(annot_AD, file = "ModuleViewer/Ens_Anno_Tangle_AD", quote = F, sep = '|', na = "", row.names = F,
+            col.names = F)
+```
+
+Plaque stage
+```{r}
+annotation_AD$col <- factor(annotation_AD$Plaque.Stage, levels=c("Stage A","Stage B", "Stage C", "None"), 
+                         labels=c("#FFCC99", "#FF9933", "#994C00", "#FFFFFF"))
+annotation_AD$cond <- paste(annotation_AD$Sample, annotation_AD$col, sep=":")
+head(annotation_AD)
+annot_AD <- t(annotation_AD[,8])
+write.table(annot_AD, file = "ModuleViewer/Ens_Anno_Plaque_AD", quote = F, sep = '|', na = "", row.names = F,
+            col.names = F)
+```
+
+## MDD 
+
+```{r}
+annotation_MDD <- read.delim("C:/UGent/Master 2/Master's dissertation/R/Lemon-Tree/annotation_MDD.txt")
+head(annotation_MDD)
+annotation_MDD$Diagnosis <- as.factor(annotation_MDD$Diagnosis)
+annotation_MDD$Sex <- as.factor(annotation_MDD$Sex)
+annotation_MDD <- annotation_MDD %>% dplyr::select(-BioProject)
+levels(annotation_MDD$Diagnosis) #4
+levels(annotation_MDD$Sex) #2
+```
+
+Diagnosis
+```{r}
+annotation_MDD$col <- factor(annotation_MDD$Diagnosis, levels=c("Major Depression", "Control",  
+                                                                "Major depression non-suicide", 
+                                                                "Major depression suicide"), 
+                         labels=c("#eb764f","#44BB99", "#eb764f", "#eb764f"))
+annotation_MDD$cond <- paste(annotation_MDD$Sample, annotation_MDD$col, sep=":")
+head(annotation_MDD)
+annot_MDD <- t(annotation_MDD[,5])
+write.table(annot_MDD, file = "ModuleViewer/Ens_Anno_Diagn_MDD", quote = F, sep = '|', na = "", row.names = F,
+            col.names = F)
+```
+Sex
+```{r}
+annotation_MDD$col <- factor(annotation_MDD$Sex, levels=c("male", "female"), 
+                         labels=c("#99DDFF","#FFAABB"))
+annotation_MDD$cond <- paste(annotation_MDD$Sample, annotation_MDD$col, sep=":")
+head(annotation_MDD)
+annot_MDD <- t(annotation_MDD[,5])
+write.table(annot_MDD, file = "ModuleViewer/Ens_Anno_Sex_MDD", quote = F, sep = '|', na = "", row.names = F,
+            col.names = F)
+```
+
+
+# Regulators of modules
+```{r}
+km_reg_AD <- read.delim("kmclust_reg_AD")
+head(km_reg_AD)
+colnames(km_reg_AD) <- c("Cluster", "genes_clust", "Regulators")
+km_reg_AD <- km_reg_AD %>% arrange(Cluster)
+dim(km_reg_AD)
+km_reg_AD[(km_reg_AD$Regulators == ""), ] #only large cluster 28
+km_reg_AD <- km_reg_AD %>% slice(-28)
+dim(km_reg_AD)
+```
+
+```{r}
+km_reg_MDD <- read.delim("kmclust_reg_MDD")
+head(km_reg_MDD)
+colnames(km_reg_MDD) <- c("Cluster", "genes_clust", "Regulators")
+km_reg_MDD <- km_reg_MDD %>% arrange(Cluster)
+dim(km_reg_MDD)
+km_reg_MDD[(km_reg_MDD$Regulators == ""), ] #only large cluster 5
+km_reg_MDD <- km_reg_MDD %>% slice(-5)
+dim(km_reg_MDD)
+```
+
+Split regulators into different columns 
+```{r}
+km_reg_AD[paste0("Regulator", c(1:11))] <- str_split_fixed(km_reg_AD$Regulators, '_', 11)
+head(km_reg_AD)
+km_reg_AD <- km_reg_AD %>% select(-Regulator11) # 10 regulators but last _ gone
+```
+
+Make new data frame with one regulator and cluster 
+```{r}
+new_reg_AD1 <- data.frame("Cluster" = km_reg_AD$Cluster, "Regulator" = km_reg_AD$Regulator1)
+head(new_reg_AD1)
+new_reg_AD2 <- data.frame("Cluster" = km_reg_AD$Cluster, "Regulator" = km_reg_AD$Regulator2)
+new_reg_AD3 <- data.frame("Cluster" = km_reg_AD$Cluster, "Regulator" = km_reg_AD$Regulator3)
+new_reg_AD4 <- data.frame("Cluster" = km_reg_AD$Cluster, "Regulator" = km_reg_AD$Regulator4)
+new_reg_AD5 <- data.frame("Cluster" = km_reg_AD$Cluster, "Regulator" = km_reg_AD$Regulator5)
+new_reg_AD6 <- data.frame("Cluster" = km_reg_AD$Cluster, "Regulator" = km_reg_AD$Regulator6)
+new_reg_AD7 <- data.frame("Cluster" = km_reg_AD$Cluster, "Regulator" = km_reg_AD$Regulator7)
+new_reg_AD8 <- data.frame("Cluster" = km_reg_AD$Cluster, "Regulator" = km_reg_AD$Regulator8)
+new_reg_AD9 <- data.frame("Cluster" = km_reg_AD$Cluster, "Regulator" = km_reg_AD$Regulator9)
+new_reg_AD10 <- data.frame("Cluster" = km_reg_AD$Cluster, "Regulator" = km_reg_AD$Regulator10)
+new_reg_AD <- rbind(new_reg_AD1, new_reg_AD2, new_reg_AD3, new_reg_AD4, new_reg_AD5,
+                    new_reg_AD6, new_reg_AD7, new_reg_AD8, new_reg_AD9, new_reg_AD10)
+head(new_reg_AD)
+dim(new_reg_AD)
+new_reg_AD <- new_reg_AD[!(new_reg_AD$Regulator == ""), ]
+dim(new_reg_AD)
+new_reg_AD <- new_reg_AD %>% arrange(Cluster)
+head(new_reg_AD)
+new_reg_AD <- new_reg_AD %>% select(Regulator, Cluster)
+write.table(new_reg_AD, file = "reg_clust_ens_AD.txt", sep = "\t", quote = F, row.names = F, col.names = F)
+```
+MDD 
+```{r}
+km_reg_MDD[paste0("Regulator", c(1:11))] <- str_split_fixed(km_reg_MDD$Regulators, '_', 11)
+head(km_reg_MDD)
+km_reg_MDD <- km_reg_MDD %>% select(-Regulator11)
+```
+ 
+```{r}
+new_reg_MDD1 <- data.frame("Cluster" = km_reg_MDD$Cluster, "Regulator" = km_reg_MDD$Regulator1)
+head(new_reg_MDD1)
+new_reg_MDD2 <- data.frame("Cluster" = km_reg_MDD$Cluster, "Regulator" = km_reg_MDD$Regulator2)
+new_reg_MDD3 <- data.frame("Cluster" = km_reg_MDD$Cluster, "Regulator" = km_reg_MDD$Regulator3)
+new_reg_MDD4 <- data.frame("Cluster" = km_reg_MDD$Cluster, "Regulator" = km_reg_MDD$Regulator4)
+new_reg_MDD5 <- data.frame("Cluster" = km_reg_MDD$Cluster, "Regulator" = km_reg_MDD$Regulator5)
+new_reg_MDD6 <- data.frame("Cluster" = km_reg_MDD$Cluster, "Regulator" = km_reg_MDD$Regulator6)
+new_reg_MDD7 <- data.frame("Cluster" = km_reg_MDD$Cluster, "Regulator" = km_reg_MDD$Regulator7)
+new_reg_MDD8 <- data.frame("Cluster" = km_reg_MDD$Cluster, "Regulator" = km_reg_MDD$Regulator8)
+new_reg_MDD9 <- data.frame("Cluster" = km_reg_MDD$Cluster, "Regulator" = km_reg_MDD$Regulator9)
+new_reg_MDD10 <- data.frame("Cluster" = km_reg_MDD$Cluster, "Regulator" = km_reg_MDD$Regulator10)
+new_reg_MDD <- rbind(new_reg_MDD1, new_reg_MDD2, new_reg_MDD3, new_reg_MDD4, new_reg_MDD5,
+                    new_reg_MDD6, new_reg_MDD7, new_reg_MDD8, new_reg_MDD9, new_reg_MDD10)
+head(new_reg_MDD)
+dim(new_reg_MDD)
+new_reg_MDD <- new_reg_MDD[!(new_reg_MDD$Regulator == ""), ]
+dim(new_reg_MDD)
+new_reg_MDD <- new_reg_MDD %>% arrange(Cluster)
+head(new_reg_MDD, 10)
+new_reg_MDD <- new_reg_MDD %>% select(Regulator, Cluster)
+write.table(new_reg_MDD, file = "reg_clust_ens_MDD.txt", sep = "\t", quote = F, row.names = F, col.names = F)
+```
+

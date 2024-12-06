@@ -1,0 +1,224 @@
+---
+title: "hdWGCNA module projection modules to single-cell data"
+author: "Hanne Puype"
+date: "2024-01-15"
+output:  
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Load packages
+```{r}
+library(tidyverse)
+library(Seurat)
+library(cowplot)
+library(patchwork)
+library(viridis)
+#BiocManager::install(c("WGCNA", "GeneOverlap"))
+#devtools::install_github("NightingaleHealth/ggforestplot")
+#devtools::install_github("cysouw/qlcMatrix")
+#devtools::install_github('smorabit/hdWGCNA', ref='dev')
+library(WGCNA)
+library(hdWGCNA)
+library(igraph)
+theme_set(theme_cowplot())
+set.seed(12345)
+```
+
+# AD
+## Load data
+```{r}
+# load seuratobj
+seurat_obj <- readRDS("./single-cell/Seurat_AD.rds")
+
+# load consensus modules 
+consensus_modules <- read.table("kmed_modules_AD.txt", header = F)
+names(consensus_modules) <- c("gene_name", "module")
+
+consensus_modules <- subset(consensus_modules, gene_name %in% rownames(seurat_obj))
+#consensus_modules <- consensus_modules %>% filter(module %in% c(22, 39, 141, 153))
+consensus_modules$color <- viridis(nlevels(factor(consensus_modules$module)))[as.numeric(factor(consensus_modules$module))]
+```
+
+```{r}
+seurat_obj <- ProjectModules(
+  seurat_obj,
+  modules = consensus_modules,
+  seurat_ref = NULL,
+  wgcna_name = "None",
+  wgcna_name_proj = 'Modules_consensus')
+```
+
+We can extract the projected module eigengenes using the GetMEs function.  
+```{r}
+projected_hMEs <- GetMEs(seurat_obj)
+saveRDS(seurat_obj, file = 'Seurat_AD_allmodules.rds')
+seurat_obj <- readRDS("hdWGCNA/Seurat_AD_allmodules.rds")
+```
+
+## Visualization 
+https://smorabit.github.io/hdWGCNA/reference/ModuleFeaturePlot.html 
+```{r fig.width=10, fig.height=10}
+# make a featureplot of hMEs for each module
+plot_list <- ModuleFeaturePlot(seurat_obj, 
+                               order = 'shuffle', 
+                               raster = TRUE, raster_dpi = 100, 
+                               restrict_range = TRUE, raster_scale = 0.25)
+
+
+# stitch together with patchwork
+wrap_plots(plot_list[1:20], ncol = 4)
+ggsave("Featureplot_modules_1-20_AD.pdf", device = "pdf")
+wrap_plots(plot_list[21:40], ncol = 4)
+ggsave("Featureplot_modules_21-40_AD.pdf", device = "pdf")
+wrap_plots(plot_list[41:60], ncol = 4)
+ggsave("Featureplot_modules_41-60_AD.pdf", device = "pdf")
+wrap_plots(plot_list[61:80], ncol = 4)
+ggsave("Featureplot_modules_61-80_AD.pdf", device = "pdf")
+wrap_plots(plot_list[81:100], ncol = 4)
+ggsave("Featureplot_modules_81-100_AD.pdf", device = "pdf")
+wrap_plots(plot_list[101:120], ncol = 4)
+ggsave("Featureplot_modules_101-120_AD.pdf", device = "pdf")
+wrap_plots(plot_list[121:140], ncol = 4)
+ggsave("Featureplot_modules_121-140_AD.pdf", device = "pdf")
+wrap_plots(plot_list[141:155], ncol = 4)
+ggsave("Featureplot_modules_141-155_AD.pdf", device = "pdf")
+```
+
+```{r fig.width=12}
+# add hMEs to Seurat meta-data:
+seurat_obj@meta.data <- cbind(
+  seurat_obj@meta.data,
+  projected_hMEs)
+
+plot_feats <- c(
+  '4', "58", # ASC
+  "40", "87", "123", "129", # neurons
+  '22', '26', "36", "39", "51", "93", "139", "141", "153", # MG
+  '35', "66", "105", # ODC
+  "130", # OPC
+  "85", "86", # Peri/End
+  "21", "60", "150") # Others 
+p <- DotPlot(
+    seurat_obj,
+    features = plot_feats,
+    group.by = 'celltype', 
+    dot.min = 0.25)
+p <- p +
+  RotatedAxis() +
+  scale_color_gradient2(high = 'red', mid = 'grey95', low = 'blue') +
+  scale_y_discrete(limits = c("PER.END", "OPC", "ODC", "MG", "INH", "EX", "ASC"),
+                   labels = c("Pericytes/endothelial", "OPCs", "Oligodendrocytes", "Microglia", "Inhibitory neurons",
+                              "Excitatory neurons", "Astrocytes")) + 
+  theme(
+    panel.border = element_rect(linewidth = 1, fill = NA, color = 'black'),
+    axis.line.x = element_blank(),
+    axis.line.y = element_blank(),
+    text = element_text(size = 22),
+    axis.text.y = element_text(size = 22),
+    axis.text.x = element_text(size = 16, angle = 90, hjust = 1),
+    legend.position = "bottom", legend.direction = "vertical") +
+  ylab('') + xlab('Population-level AD modules')
+p
+ggsave("Dotplot_modules_AD_v5.pdf", device = "pdf", width = 10, height = 6)
+```
+
+# MDD 
+## Load data
+```{r}
+# load seuratobj
+seurat_obj <- readRDS("./single-cell/Seurat_MDD.rds")
+
+# load consensus modules 
+consensus_modules <- read.table("kmed_modules_MDD.txt", header = F)
+names(consensus_modules) <- c("gene_name", "module")
+
+consensus_modules <- subset(consensus_modules, gene_name %in% rownames(seurat_obj))
+consensus_modules$color <- viridis(nlevels(factor(consensus_modules$module)))[as.numeric(factor(consensus_modules$module))]
+```
+
+```{r}
+seurat_obj <- ProjectModules(
+  seurat_obj,
+  modules = consensus_modules,
+  seurat_ref = NULL,
+  wgcna_name = "None",
+  wgcna_name_proj = 'Modules_consensus')
+```
+
+We can extract the projected module eigengenes using the GetMEs function.  
+```{r}
+projected_hMEs <- GetMEs(seurat_obj)
+saveRDS(seurat_obj, file = 'Seurat_MDD_allmodules.rds')
+seurat_obj <- readRDS("hdWGCNA/Seurat_MDD_allmodules.rds")
+```
+
+## Visualization 
+```{r fig.width=10, fig.height=10}
+# make a featureplot of hMEs for each module
+plot_list <- ModuleFeaturePlot(seurat_obj, 
+                               order = "shuffle", 
+                               raster = TRUE, raster_dpi = 100, 
+                               restrict_range = TRUE, raster_scale = 0.25)
+
+# stitch together with patchwork
+wrap_plots(plot_list[1:20], ncol = 4)
+ggsave("Featureplot_modules_1-20_MDD.pdf", device = "pdf")
+wrap_plots(plot_list[21:40], ncol = 4)
+ggsave("Featureplot_modules_21-40_MDD.pdf", device = "pdf")
+wrap_plots(plot_list[41:60], ncol = 4)
+ggsave("Featureplot_modules_41-60_MDD.pdf", device = "pdf")
+wrap_plots(plot_list[61:80], ncol = 4)
+ggsave("Featureplot_modules_61-80_MDD.pdf", device = "pdf")
+wrap_plots(plot_list[81:100], ncol = 4)
+ggsave("Featureplot_modules_81-100_MDD.pdf", device = "pdf")
+wrap_plots(plot_list[101:120], ncol = 4)
+ggsave("Featureplot_modules_101-120_MDD.pdf", device = "pdf")
+wrap_plots(plot_list[121:140], ncol = 4)
+ggsave("Featureplot_modules_121-140_MDD.pdf", device = "pdf")
+wrap_plots(plot_list[141:156], ncol = 4)
+ggsave("Featureplot_modules_141-156_MDD.pdf", device = "pdf")
+```
+
+```{r fig.width=12}
+# add hMEs to Seurat meta-data
+seurat_obj@meta.data <- cbind(
+  seurat_obj@meta.data,
+  projected_hMEs)
+
+plot_feats <- c(
+  "3", "12", "36", "44", "48", "50", "93", # ASC
+  "49", # neurons
+  "24", "37", "63", "81", # MG
+   # ODC
+   # OPC
+  "4", "56", "61", "110", # END
+  "59", "115", "147") # others
+p <- DotPlot(
+    seurat_obj,
+    features = plot_feats,
+    group.by = 'Celltype', 
+    dot.min = 0.25)
+p <- p +
+  RotatedAxis() +
+  scale_color_gradient2(high = 'red', mid = 'grey95', low = 'blue') +
+  scale_y_discrete(limits = c("END", "OPC", "ODC", "MICRO", "INH", "EX", "ASC"),
+                   labels = c("Endothelial cells", "OPCs", "Oligodendrocytes",  "Microglia", "Inhibitory neurons", 
+                              "Excitatory neurons", "Astrocytes")) +
+  theme(
+    panel.border = element_rect(linewidth = 1, fill = NA, color = 'black'),
+    axis.line.x = element_blank(),
+    axis.line.y = element_blank(),
+    text = element_text(size = 22),
+    axis.text.y = element_text(size = 22),
+    axis.text.x = element_text(size = 17, angle = 90, hjust = 1),
+    legend.position = "bottom", legend.direction = "vertical") +
+  ylab('') + xlab('Population-level MDD modules')
+p
+ggsave("Dotplot_modules_MDD_v5.pdf", device = "pdf", width = 10, height = 6)
+```

@@ -1,0 +1,250 @@
+---
+title: "Overlap with curated regulatory interactions"
+author: "Hanne Puype"
+date: "2022-10-06"
+output:  
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+# OmniPath  
+OmniPath consists of five major databases, each combining many original resources. The five databases are:  
+Network (interactions)  
+Enzyme-substrate relationships (enzsub)  
+Protein complexes (complexes)  
+Annotations (annotations)  
+Intercellular communication roles (intercell) 
+
+Gene regulatory interactions (transcriptional)  
+dorothea: a comprehensive collection built out of 18 resources, contains literature curated, ChIP-Seq, gene expression derived and TF binding site predicted data, with 5 confidence levels (A-E) import_dorothea_interactions  
+tf_target: additional literature curated interactions import_tf_target_interactions
+
+## Import regulatory interactions OmniPath
+Have copy and pasted it from the web.  https://omnipathdb.org/interactions?genesymbols=yes&datasets=dorothea,tf_target&organisms=9606&dorothea_levels=A,B,C,D&fields=sources,references,curation_effort,dorothea_level&license=academic  
+
+To include CollecTRI: 
+https://omnipathdb.org/interactions?genesymbols=yes&datasets=dorothea,tf_target,collectri&organisms=9606&dorothea_levels=A,B,C,D&fields=sources,references,curation_effort,dorothea_level&license=academic  
+```{r}
+gri <- read.delim("Omnipath.txt") # levels A, B, C and D
+head(gri)
+dim(gri)
+gri %>% group_by(dorothea_level) %>% summarise(n())
+gri %>% group_by(sources) %>% summarise(n())
+gri_collecTRI <- read.delim("CollecTRI.txt")
+head(gri_collecTRI)
+gri_f <- bind_rows(gri, gri_collecTRI)
+```
+
+Filter for TFs only from Lovering et al. 
+```{r}
+dbTF <- read.csv("../dbTF.csv", sep="")
+head(dbTF)
+gri_f <- gri_f %>% filter(source_genesymbol %in% dbTF$Gene_symbol)
+dim(gri_f) # 121741
+length(unique(gri_f$source_genesymbol)) # 862
+gri_f <- gri_f %>% select(source_genesymbol, target_genesymbol)
+names(gri_f) <- c("TF", "Target_gene")
+gri_f$concat <- paste(gri_f$TF, gri_f$Target_gene, sep = ":")
+gri_f <- gri_f %>% distinct()
+```
+
+
+# Network from Marbach et al.
+https://www.nature.com/articles/nmeth.3799  
+## Load network frontal lobe
+```{r}
+frontal_lobe_adult <- read.delim("../networks/FANTOM5_individual_networks/394_individual_networks/frontal_lobe_adult.txt.gz", 
+                                 header=FALSE)
+frontal_lobe_adult <- frontal_lobe_adult %>% arrange(desc(V3))
+head(frontal_lobe_adult)
+dim(frontal_lobe_adult) # 1 245 973
+frontal_lobe_adult <- frontal_lobe_adult %>% filter(V1 %in% dbTF$Gene_symbol)
+dim(frontal_lobe_adult) # 1 086 698 
+length(unique(frontal_lobe_adult$V1)) # 567
+tail(frontal_lobe_adult)
+frontal_lobe_adult <- frontal_lobe_adult %>% select(V1, V2)
+names(frontal_lobe_adult) <- c("TF", "Target_gene")
+frontal_lobe_adult$concat <- paste(frontal_lobe_adult$TF, frontal_lobe_adult$Target_gene, sep = ":")
+```
+
+# Consensus networks 
+```{r}
+network_AD <- read.table("../ensemble_netw_AD.txt", header = T, sep = "\t")
+network_MDD <- read.table("../ensemble_netw_MDD.txt", header = T, sep = "\t")
+network_AD$concat <- paste(network_AD$TF, network_AD$Target_gene, sep = ":")
+network_MDD$concat <- paste(network_MDD$TF, network_MDD$Target_gene, sep = ":")
+```
+
+### Precision and recall
+#### AD
+ Filter genes and TFs in networks
+```{r}
+gri_f_AD <- gri_f %>% filter(TF %in% network_AD$TF)
+gri_f_AD <- gri_f_AD %>% filter(Target_gene %in% network_AD$Target_gene)
+frontal_lobe_adult_AD <- frontal_lobe_adult %>% filter(TF %in% network_AD$TF)
+frontal_lobe_adult_AD <- frontal_lobe_adult_AD %>% filter(Target_gene %in% network_AD$Target_gene)
+
+network_AD_O <- network_AD %>% filter(TF %in% gri_f_AD$TF)
+network_AD_O <- network_AD_O %>% filter(Target_gene %in% gri_f_AD$Target_gene)
+network_AD_M <- network_AD %>% filter(TF %in% frontal_lobe_adult_AD$TF)
+network_AD_M <- network_AD_M %>% filter(Target_gene %in% frontal_lobe_adult_AD$Target_gene)
+```
+
+```{r}
+length(unique(gri_f_AD$TF)) # 536
+length(unique(frontal_lobe_adult_AD$TF)) # 334
+```
+
+OmniPath
+```{r}
+true_pos <- length(intersect(gri_f_AD$concat, network_AD_O$concat))
+precision_AD_bulk_O <- true_pos / dim(network_AD_O)[1]
+recall_AD_bulk_O <- true_pos / dim(gri_f_AD)[1]
+print(c("Precision of bulk AD network:", precision_AD_bulk_O), quote = F)
+print(c("Recall of bulk AD network:", recall_AD_bulk_O), quote = F)
+```
+
+Marbach
+```{r}
+true_pos <- length(intersect(frontal_lobe_adult_AD$concat, network_AD_M$concat))
+precision_AD_bulk_M <- true_pos / dim(network_AD_M)[1]
+recall_AD_bulk_M <- true_pos / dim(frontal_lobe_adult_AD)[1]
+print(c("Precision of bulk AD network:", precision_AD_bulk_M), quote = F)
+print(c("Recall of bulk AD network:", recall_AD_bulk_M), quote = F)
+```
+
+#### MDD
+```{r}
+gri_f_MDD <- gri_f %>% filter(TF %in% network_MDD$TF)
+gri_f_MDD <- gri_f_MDD %>% filter(Target_gene %in% network_MDD$Target_gene)
+frontal_lobe_adult_MDD <- frontal_lobe_adult %>% filter(TF %in% network_MDD$TF)
+frontal_lobe_adult_MDD <- frontal_lobe_adult_MDD %>% filter(Target_gene %in% network_MDD$Target_gene)
+
+network_MDD_O <- network_MDD %>% filter(TF %in% gri_f_MDD$TF)
+network_MDD_O <- network_MDD_O %>% filter(Target_gene %in% gri_f_MDD$Target_gene)
+network_MDD_M <- network_MDD %>% filter(TF %in% frontal_lobe_adult_MDD$TF)
+network_MDD_M <- network_MDD_M %>% filter(Target_gene %in% frontal_lobe_adult_MDD$Target_gene)
+```
+
+Omnipath
+```{r}
+true_pos <- length(intersect(gri_f_MDD$concat, network_MDD_O$concat))
+precision_MDD_bulk_O <- true_pos / dim(network_MDD_O)[1]
+recall_MDD_bulk_O <- true_pos / dim(gri_f_MDD)[1]
+print(c("Precision of bulk MDD network:", precision_MDD_bulk_O), quote = F)
+print(c("Recall of bulk MDD network:", recall_MDD_bulk_O), quote = F)
+```
+
+Marbach
+```{r}
+true_pos <- length(intersect(frontal_lobe_adult_MDD$concat, network_MDD_M$concat))
+precision_MDD_bulk_M <- true_pos / dim(network_MDD_M)[1]
+recall_MDD_bulk_M <- true_pos / dim(frontal_lobe_adult_MDD)[1]
+print(c("Precision of bulk MDD network:", precision_MDD_bulk_M), quote = F)
+print(c("Recall of bulk MDD network:", recall_MDD_bulk_M), quote = F)
+```
+
+# Single-cell networks
+```{r}
+network_sc_AD <- read.table("../Single-cell/edgelist_sc_AD.txt", sep = "\t", header = T)
+network_sc_MDD <- read.table("../Single-cell/edgelist_sc_MDD.txt", sep = "\t", header = T)
+network_sc_AD$concat <- paste(network_sc_AD$regulator, network_sc_AD$gene, sep = ":")
+network_sc_MDD$concat <- paste(network_sc_MDD$regulator, network_sc_MDD$gene, sep = ":")
+```
+
+### Precision and recall
+#### AD
+```{r}
+gri_f_AD <- gri_f %>% filter(TF %in% network_sc_AD$regulator)
+gri_f_AD <- gri_f_AD %>% filter(Target_gene %in% network_sc_AD$gene)
+frontal_lobe_adult_AD <- frontal_lobe_adult %>% filter(TF %in% network_sc_AD$regulator)
+frontal_lobe_adult_AD <- frontal_lobe_adult_AD %>% filter(Target_gene %in% network_sc_AD$gene)
+
+network_sc_AD_O <- network_sc_AD %>% filter(regulator %in% gri_f_AD$TF)
+network_sc_AD_O <- network_sc_AD_O %>% filter(gene %in% gri_f_AD$Target_gene)
+network_sc_AD_M <- network_sc_AD %>% filter(regulator %in% frontal_lobe_adult_AD$TF)
+network_sc_AD_M <- network_sc_AD_M %>% filter(gene %in% frontal_lobe_adult_AD$Target_gene)
+```
+
+```{r}
+length(unique(gri_f_AD$TF)) # 303
+length(unique(frontal_lobe_adult_AD$TF)) # 253
+```
+
+OmniPath
+```{r}
+true_pos <- length(intersect(gri_f_AD$concat, network_sc_AD_O$concat))
+precision_AD_sc_O <- true_pos / dim(network_sc_AD_O)[1]
+recall_AD_sc_O <- true_pos / dim(gri_f_AD)[1]
+print(c("Precision of single-cell AD network:", precision_AD_sc_O), quote = F)
+print(c("Recall of single-cell AD network:", recall_AD_sc_O), quote = F)
+```
+Marbach
+```{r}
+true_pos <- length(intersect(frontal_lobe_adult_AD$concat, network_sc_AD_M$concat))
+precision_AD_sc_M <- true_pos / dim(network_sc_AD_M)[1]
+recall_AD_sc_M <- true_pos / dim(frontal_lobe_adult_AD)[1]
+print(c("Precision of single-cell AD network:", precision_AD_sc_M), quote = F)
+print(c("Recall of single-cell AD network:", recall_AD_sc_M), quote = F)
+```
+
+#### MDD
+```{r}
+gri_f_MDD <- gri_f %>% filter(TF %in% network_sc_MDD$regulator)
+gri_f_MDD <- gri_f_MDD %>% filter(Target_gene %in% network_sc_MDD$gene)
+frontal_lobe_adult_MDD <- frontal_lobe_adult %>% filter(TF %in% network_sc_MDD$regulator)
+frontal_lobe_adult_MDD <- frontal_lobe_adult_MDD %>% filter(Target_gene %in% network_sc_MDD$gene)
+
+network_sc_MDD_O <- network_sc_MDD %>% filter(regulator %in% gri_f_MDD$TF)
+network_sc_MDD_O <- network_sc_MDD_O %>% filter(gene %in% gri_f_MDD$Target_gene)
+network_sc_MDD_M <- network_sc_MDD %>% filter(regulator %in% frontal_lobe_adult_MDD$TF)
+network_sc_MDD_M <- network_sc_MDD_M %>% filter(gene %in% frontal_lobe_adult_MDD$Target_gene)
+```
+
+Omnipath
+```{r}
+true_pos <- length(intersect(gri_f_MDD$concat, network_sc_MDD_O$concat))
+precision_MDD_sc_O <- true_pos / dim(network_sc_MDD_O)[1]
+recall_MDD_sc_O <- true_pos / dim(gri_f_MDD)[1]
+print(c("Precision of sinlge-cell MDD network:", precision_MDD_sc_O), quote = F)
+print(c("Recall of sinlge-cell MDD network:", recall_MDD_sc_O), quote = F)
+```
+
+Marbach
+```{r}
+true_pos <- length(intersect(frontal_lobe_adult_MDD$concat, network_sc_MDD_M$concat))
+precision_MDD_sc_M <- true_pos / dim(network_sc_MDD_M)[1]
+recall_MDD_sc_M <- true_pos / dim(frontal_lobe_adult_MDD)[1]
+print(c("Precision of single-cell MDD network:", precision_MDD_sc_M), quote = F)
+print(c("Recall of single-cell MDD network:", recall_MDD_sc_M), quote = F)
+```
+
+
+Save values
+```{r}
+PR_combined <- as.data.frame(c(precision_AD_bulk_O, precision_MDD_bulk_O, precision_AD_sc_O, precision_MDD_sc_O, 
+                               recall_AD_bulk_O, recall_MDD_bulk_O, recall_AD_sc_O, recall_MDD_sc_O))
+names(PR_combined) <- "PR"
+rownames(PR_combined) <- c("precision_AD", "precision_MDD", "precision_scAD", "precision_scMDD", 
+                           "recall_AD", "recall_MDD", "recall_scAD", "recall_scMDD")
+write.table(PR_combined, file = "PR_Omnipath.txt", quote = F, row.names = T, col.names = T, sep = "\t")
+```
+
+```{r}
+PR_combined <- as.data.frame(c(precision_AD_bulk_M, precision_MDD_bulk_M, precision_AD_sc_M, precision_MDD_sc_M, 
+                               recall_AD_bulk_M, recall_MDD_bulk_M, recall_AD_sc_M, recall_MDD_sc_M))
+names(PR_combined) <- "PR"
+rownames(PR_combined) <- c("precision_AD", "precision_MDD", "precision_scAD", "precision_scMDD", 
+                           "recall_AD", "recall_MDD", "recall_scAD", "recall_scMDD")
+write.table(PR_combined, file = "PR_Marbach.txt", quote = F, row.names = T, col.names = T, sep = "\t")
+```
+

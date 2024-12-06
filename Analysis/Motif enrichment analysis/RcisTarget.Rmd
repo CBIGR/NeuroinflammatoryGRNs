@@ -1,0 +1,170 @@
+---
+title: "RcisTarget"
+author: "Hanne Puype"
+date: "2023-12-21"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+
+The function cisTarget() allows to perform the motif-enrichment analysis on a gene list. The main input parameters are the gene list and the motif databases, which should be chosen depending on the organism and the search space around the TSS of the genes.\
+<https://resources.aertslab.org/cistarget/databases/homo_sapiens/hg38/refseq_r80/mc_v10_clust/gene_based/>\
+<https://resources.aertslab.org/cistarget/motif2tf/>  
+
+## Load packages
+```{r}
+library(tidyverse)
+library(RcisTarget)
+library(arrow)
+library(data.table)
+library(DT)
+library(reshape2)
+library(visNetwork)
+```
+
+## Load modules
+```{r}
+modulesAD <- read.table("kmed_modules_AD.txt", header = F, sep = "\t")
+modulesMDD <- read.table("kmed_modules_MDD.txt", header = F, sep = "\t")
+colnames(modulesAD) <- c("Gene", "Module")
+colnames(modulesMDD) <- c("Gene", "Module")
+modulesAD <- as_tibble(modulesAD)
+modulesMDD <- as_tibble(modulesMDD)
+B <- modulesAD %>% group_by(Module) %>% mutate(rid = row_number()) %>% spread(Module, Gene)
+for (i in 2:length(names(B))){
+  names(B)[i] <- paste0('module', names(B)[i])
+}
+B_MDD <- modulesMDD %>% group_by(Module) %>% mutate(rid = row_number()) %>% spread(Module, Gene)
+for (i in 2:length(names(B_MDD))){
+  names(B_MDD)[i] <- paste0('module', names(B_MDD)[i])
+}
+```
+
+## RcisTarget
+Currently the function importAnnotations doesn't work  
+```{r}
+# select motif database
+# data(motifAnnotations_hgnc) # for previous version 
+motifAnnotations_hgnc_v10 <- read.table("motifs-v10nr_clust-nr.hgnc-m0.001-o0.0.txt", 
+                                        header = T, sep = "\t")
+motifAnnotations_hgnc_v10 <- motifAnnotations_hgnc_v10 %>% rename("motif" = "motif_id")
+motifAnnotations_hgnc_v10 <- motifAnnotations_hgnc_v10 %>% rename("TF" = "gene_name")
+motifAnnotations_hgnc_v10 <- as.data.table(motifAnnotations_hgnc_v10)
+#motifAnnotations_hgnc_v10 <- importAnnotations("RcisTarget/motifs-v10nr_clust-nr.hgnc-m0.001-o0.0.txt")
+motifRankings <- importRankings("hg38_10kbp_up_10kbp_down_full_tx_v10_clust.genes_vs_motifs.rankings.feather",
+                                indexCol = "motifs")
+```
+
+Regulators 
+```{r}
+reg_AD <- read.table("reg_clust_ens_AD.txt", header = F, sep = "\t")
+reg_MDD <- read.table("reg_clust_ens_MDD.txt", header = F, sep = "\t")
+names(reg_AD) <- c("TF", "Module")
+names(reg_MDD) <- c("TF", "Module")
+```
+
+### Loop over all modules
+Retrieve TFs which were found by RcisTarget (motif) and inferred 
+Put in mvf file for ModuleViewer
+AD
+```{r}
+modules_loop <- paste0("module", c(1:155))
+i <- 1
+df <- data.frame("Module" = numeric(0), "enrichedGenes" = character(0), "Tf" = character(0))
+
+for (module in modules_loop) {
+  modIds <- B[module]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  geneList <- modIds$GeneSymbol
+  geneList <- geneList[!is.na(geneList)]
+  geneLists <- list(module_genes = geneList)
+  
+  # motif enrichment analysis
+  motifEnrichmentTable_wGenes <- cisTarget(geneLists, motifRankings,
+                                 motifAnnot = motifAnnotations_hgnc_v10)
+  
+  # TFs annotated to enriched motifs
+  motifEnrichmentTable_wGenes <- motifEnrichmentTable_wGenes %>% 
+    left_join(motifAnnotations_hgnc_v10, by = c("motif" = "motif"))
+  motifEnrichmentTable_wGenes <- motifEnrichmentTable_wGenes %>% select(geneSet, motif, TF, NES, AUC, nEnrGenes, enrichedGenes)
+  motifEnrichmentTable_wGenes <- motifEnrichmentTable_wGenes %>% distinct(TF, .keep_all = T)
+  write.table(motifEnrichmentTable_wGenes, paste0("RcisTarget/MotifEnrich_AD/motifEnrichmentTable",module,".txt"), sep = "\t", row.names = F, quote = F)
+  
+  # Which enriched motifs overlap with inferred regulators
+  reg_AD_module <- reg_AD %>% filter(Module == i)
+  motifEnrichmentTable_wGenes_inf <- motifEnrichmentTable_wGenes[motifEnrichmentTable_wGenes$TF %in% reg_AD_module$TF,]
+  # for ModuleViewer we need: module   genes|again|split  term  
+  motifEnrichmentTable_wGenes_inf <- motifEnrichmentTable_wGenes_inf %>% add_column(Module = i) %>% dplyr::select(Module, enrichedGenes, TF)
+  motifEnrichmentTable_wGenes_inf$enrichedGenes <- gsub(";", "|", motifEnrichmentTable_wGenes_inf$enrichedGenes)
+  df <- rbind(df, motifEnrichmentTable_wGenes_inf)
+  i <- i + 1
+}
+dim(df) # 103 
+write.table(df, "Motif_enrich_RcisTarget_inferred_AD.mvf", quote = F, sep = "\t", row.names = F, col.names = F)
+```
+
+```{r}
+dim(modulesAD[!(modulesAD$Gene %in% colnames(motifRankings@rankings)),]) # 179 genes of modules not in motifRankings
+```
+
+MDD
+```{r}
+modules_loop <- paste0("module", c(1:156))
+i <- 1
+df <- data.frame("Module" = numeric(0), "enrichedGenes" = character(0), "Tf" = character(0))
+
+for (module in modules_loop) {
+  modIds <- B_MDD[module]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  geneList <- modIds$GeneSymbol
+  geneList <- geneList[!is.na(geneList)]
+  geneLists <- list(module_genes = geneList)
+  
+  # motif enrichment analysis
+  motifEnrichmentTable_wGenes <- cisTarget(geneLists, motifRankings,
+                                 motifAnnot = motifAnnotations_hgnc_v10)
+  
+  # TFs annotated to enriched motifs
+  motifEnrichmentTable_wGenes <- motifEnrichmentTable_wGenes %>% 
+    left_join(motifAnnotations_hgnc_v10, by = c("motif" = "motif"))
+  motifEnrichmentTable_wGenes <- motifEnrichmentTable_wGenes %>% select(geneSet, motif, TF, NES, AUC, nEnrGenes, enrichedGenes)
+  motifEnrichmentTable_wGenes <- motifEnrichmentTable_wGenes %>% distinct(TF, .keep_all = T)
+  write.table(motifEnrichmentTable_wGenes, paste0("RcisTarget/MotifEnrich_MDD/motifEnrichmentTable",module,".txt"), sep = "\t", row.names = F, quote = F)
+  
+  # Which enriched motifs overlap with inferred regulators
+  reg_MDD_module <- reg_MDD %>% filter(Module == i)
+  motifEnrichmentTable_wGenes_inf <- motifEnrichmentTable_wGenes[motifEnrichmentTable_wGenes$TF %in% reg_MDD_module$TF,]
+  # for ModuleViewer we need: module   genes|again|split  term  
+  motifEnrichmentTable_wGenes_inf <- motifEnrichmentTable_wGenes_inf %>% add_column(Module = i) %>% dplyr::select(Module, enrichedGenes, TF)
+  motifEnrichmentTable_wGenes_inf$enrichedGenes <- gsub(";", "|", motifEnrichmentTable_wGenes_inf$enrichedGenes)
+  df <- rbind(df, motifEnrichmentTable_wGenes_inf)
+  i <- i + 1
+}
+dim(df) # 193 
+write.table(df, "Motif_enrich_RcisTarget_inferred_MDD.mvf", quote = F, sep = "\t", row.names = F, col.names = F)
+```
+
+```{r}
+dim(modulesMDD[!(modulesMDD$Gene %in% colnames(motifRankings@rankings)),]) # 156 genes of modules not in motifRankings
+```
+
+The final output of RcisTarget is a data.table containing the information about the motif enrichment and its annotation organized in the following fields:\
+- geneSet: Name of the gene set\
+- motif: ID of the motif\
+- NES: Normalized enrichment score of the motif in the gene-set\
+- AUC: Area Under the Curve (used to calculate the NES)\
+- TFinDB: Indicates whether the highlighted TFs are included within the high confidence annotation (two asterisks) or low confidence annotation (one asterisk).\
+- TF_highConf: Transcription factors annotated to the motif according to 'motifAnnot_highConfCat'.\
+- TF_lowConf: Transcription factors annotated to the motif according to 'motifAnnot_lowConfCat'.\
+- enrichedGenes: Genes that are highly ranked for the given motif.\
+- nErnGenes: Number of genes highly ranked\
+- rankAtMax: Ranking at the maximum enrichment, used to determine the number of enriched genes.
+

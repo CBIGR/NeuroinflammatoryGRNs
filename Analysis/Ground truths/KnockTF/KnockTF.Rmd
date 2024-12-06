@@ -1,0 +1,139 @@
+---
+title: "KnockTF ground truth"
+author: "Hanne Puype"
+date: "2023-05-04"
+output:   
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Read in files
+
+```{r}
+library(tidyverse)
+```
+
+Downloaded from http://www.licpathway.net/KnockTF/download.php  
+```{r}
+DE_all <- read.delim("differential_expression_of_genes_all_datasets.txt")
+#DE_all %>% arrange(P_value) %>% filter(P_value != "-") %>% head()
+length(unique(DE_all$TF)) # 308
+length(unique(DE_all$Gene)) # 22132
+DE_all <- DE_all %>% distinct()
+```
+
+# Overlap KnockTF with ensemble bulk networks
+
+```{r}
+network_AD <- read.delim("../ensemble_netw_AD.txt")
+network_MDD <- read.delim("../ensemble_netw_MDD.txt")
+
+DE_all_AD <- DE_all %>% filter(TF %in% network_AD$TF) %>% filter(Gene %in% network_AD$Target_gene)
+DE_all_MDD <- DE_all %>% filter(TF %in% network_MDD$TF) %>% filter(Gene %in% network_MDD$Target_gene)
+
+network_AD <- network_AD %>% filter(TF %in% DE_all_AD$TF)
+dim(network_AD)
+length(unique(DE_all_AD$TF)) # 160
+network_MDD <- network_MDD %>% filter(TF %in% DE_all_MDD$TF)
+dim(network_MDD)
+length(unique(DE_all_MDD$TF)) # 171
+
+# genes not in DE_all but in network
+network_AD %>% filter(!Target_gene %in% DE_all_AD$Gene) %>% group_by(Target_gene) %>% summarise(n()) # 508 genes
+network_AD_f <- network_AD %>% filter(Target_gene %in% DE_all_AD$Gene)
+network_MDD_f <- network_MDD %>% filter(Target_gene %in% DE_all_MDD$Gene)
+```
+
+## Precision and recall
+
+```{r}
+DE_all_AD$concat <- paste(DE_all_AD$TF, DE_all_AD$Gene, sep = ":")
+network_AD_f$concat <- paste(network_AD_f$TF, network_AD_f$Target_gene, sep = ":")
+
+true_pos <- length(intersect(DE_all_AD$concat, network_AD_f$concat))
+precision_AD <- true_pos / dim(network_AD_f)[1]
+recall_AD <- true_pos / dim(DE_all_AD)[1]
+print(c("Precision of AD network:", precision_AD), quote = F)
+print(c("Recall of AD network:", recall_AD), quote = F)
+```
+
+```{r}
+DE_all_MDD$concat <- paste(DE_all_MDD$TF, DE_all_MDD$Gene, sep = ":")
+network_MDD_f$concat <- paste(network_MDD_f$TF, network_MDD_f$Target_gene, sep = ":")
+
+true_pos <- length(intersect(DE_all_MDD$concat, network_MDD_f$concat))
+precision_MDD <- true_pos / dim(network_MDD_f)[1]
+recall_MDD <- true_pos / dim(DE_all_MDD)[1]
+print(c("Precision of MDD network:", precision_MDD), quote = F)
+print(c("Recall of MDD network:", recall_MDD), quote = F)
+```
+
+# Overlap KnockTF and single-cell networks  
+  
+```{r}
+single_cell_AD <- read.delim("../Single-cell/edgelist_sc_AD.txt")
+single_cell_MDD <- read.delim("../Single-cell/edgelist_sc_MDD.txt")
+
+DE_all_sc_AD <- DE_all %>% filter(TF %in% single_cell_AD$regulator)
+DE_all_sc_AD <- DE_all_sc_AD %>% filter(Gene %in% single_cell_AD$gene)
+DE_all_sc_MDD <- DE_all %>% filter(TF %in% single_cell_MDD$regulator)
+DE_all_sc_MDD <- DE_all_sc_MDD %>% filter(Gene %in% single_cell_MDD$gene)
+
+single_cell_AD <- single_cell_AD %>% filter(regulator %in% DE_all_sc_AD$TF)
+single_cell_MDD <- single_cell_MDD %>% filter(regulator %in% DE_all_sc_MDD$TF)
+
+single_cell_AD_f <- single_cell_AD %>% filter(gene %in% DE_all_sc_AD$Gene)
+single_cell_MDD_f <- single_cell_MDD %>% filter(gene %in% DE_all_sc_MDD$Gene)
+```
+
+```{r}
+length(unique(DE_all_sc_AD$TF)) # 104
+length(unique(DE_all_sc_MDD$TF)) # 84
+length(unique(DE_all_sc_AD$Gene)) # 5611
+length(unique(DE_all_sc_MDD$Gene))# 4281
+```
+
+
+## Precision and recall
+### AD  
+
+```{r}
+DE_all_sc_AD$concat <- paste(DE_all_sc_AD$TF, DE_all_sc_AD$Gene, sep = ":")
+single_cell_AD_f$concat <- paste(single_cell_AD_f$regulator, single_cell_AD_f$gene, sep = ":")
+
+true_pos <- length(intersect(DE_all_sc_AD$concat, single_cell_AD_f$concat))
+precision_scAD <- true_pos / dim(single_cell_AD_f)[1]
+recall_scAD <- true_pos / dim(DE_all_sc_AD)[1]
+print(c("Precision of single-cell AD network:", precision_scAD), quote = F)
+print(c("Recall of single-cell AD network:", recall_scAD), quote = F)
+```
+
+### MDD
+
+```{r}
+DE_all_sc_MDD$concat <- paste(DE_all_sc_MDD$TF, DE_all_sc_MDD$Gene, sep = ":")
+single_cell_MDD_f$concat <- paste(single_cell_MDD_f$regulator, single_cell_MDD_f$gene, sep = ":")
+
+true_pos <- length(intersect(DE_all_sc_MDD$concat, single_cell_MDD_f$concat))
+precision_scMDD <- true_pos / dim(single_cell_MDD_f)[1]
+recall_scMDD <- true_pos / dim(DE_all_sc_MDD)[1]
+print(c("Precision of single-cell MDD network:", precision_scMDD), quote = F)
+print(c("Recall of single-cell MDD network:", recall_scMDD), quote = F)
+```
+
+## Plot for all precision and recalls
+http://www.sthda.com/english/wiki/ggplot2-barplots-quick-start-guide-r-software-and-data-visualization 
+
+```{r}
+PR_combined <- as.data.frame(c(precision_AD, precision_MDD, precision_scAD, precision_scMDD, recall_AD, recall_MDD, recall_scAD, recall_scMDD))
+names(PR_combined) <- "PR"
+row.names(PR_combined) <- c("precision_AD", "precision_MDD", "precision_scAD", "precision_scMDD", "recall_AD", "recall_MDD", "recall_scAD", "recall_scMDD")
+write.table(PR_combined, file = "PR_all_KnockTF.txt", quote = F, row.names = T, col.names = T, sep = "\t")
+```
+
+

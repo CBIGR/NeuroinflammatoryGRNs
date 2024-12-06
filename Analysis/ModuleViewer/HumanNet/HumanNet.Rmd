@@ -1,0 +1,354 @@
+---
+title: "HumanNet PPI"
+author: "Hanne Puype"
+date: "2023-03-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Read in files 
+CX co-expression
+DB pathway database
+DP protein domain
+GI genetic interaction
+GN gene neighborhood
+```{r}
+HN_PI <- read.table("HumanNet/HS-PI.tsv")
+HN_CX <- read.table("HumanNet/HS-CX.tsv")
+HN_DB <- read.table("HumanNet/HS-DB.tsv")
+HN_DP <- read.table("HumanNet/HS-DP.tsv")
+HN_GI <- read.table("HumanNet/HS-GI.tsv")
+HN_GN <- read.table("HumanNet/HS-GN.tsv")
+modulesAD <- read.table("kmed_modules_AD.txt", header = F, sep = "\t")
+modulesMDD <- read.table("kmed_modules_MDD.txt", header = F, sep = "\t")
+colnames(modulesAD) <- c("Gene", "Module")
+colnames(modulesMDD) <- c("Gene", "Module")
+```
+
+```{r}
+HN_funct <- rbind(HN_DB, HN_DP, HN_GI, HN_GN)
+```
+
+The genes are in Entrez gene ids
+
+# Convert genes to gene symbols
+```{r}
+library(tidyverse)
+library(biomaRt)
+library(annotate)
+library(org.Hs.eg.db)
+library(EnsDb.Hsapiens.v86)
+first_col <- HN_PI$V1
+first_col <- as.character(first_col)
+geneIDs1 <- ensembldb::select(EnsDb.Hsapiens.v86, keys = first_col, keytype = "ENTREZID", 
+                              columns = c("ENTREZID","SYMBOL"))
+
+sec_col <- HN_PI$V2
+sec_col <- as.character(sec_col)
+geneIDs2 <- ensembldb::select(EnsDb.Hsapiens.v86, keys = sec_col, keytype = "ENTREZID", 
+                              columns = c("ENTREZID","SYMBOL"))
+
+HN_PI_temp <- merge(HN_PI, geneIDs1, by.x = "V1", by.y = "ENTREZID")
+HN_PI_temp <- unique(HN_PI_temp)
+colnames(HN_PI_temp)[names(HN_PI_temp) == "SYMBOL"] <- "Gene1"
+HN_PI_temp %>% dplyr::filter(Gene1 == "")
+
+HN_PI_temp <- merge(HN_PI_temp, geneIDs2, by.x = "V2", by.y = "ENTREZID")
+HN_PI_temp <- unique(HN_PI_temp)
+colnames(HN_PI_temp)[names(HN_PI_temp) == "SYMBOL"] <- "Gene2"
+HN_PI_temp %>% dplyr::filter(Gene2 == "")
+HN_PI <- HN_PI_temp %>% dplyr::select(Gene1, Gene2)
+```
+
+## Add co-functional interactions (co-expression)
+```{r}
+first_col <- HN_CX$V1
+first_col <- as.character(first_col)
+geneIDs1 <- ensembldb::select(EnsDb.Hsapiens.v86, keys = first_col, keytype = "ENTREZID", 
+                              columns = c("ENTREZID","SYMBOL"))
+sec_col <- HN_CX$V2
+sec_col <- as.character(sec_col)
+geneIDs2 <- ensembldb::select(EnsDb.Hsapiens.v86, keys = sec_col, keytype = "ENTREZID", 
+                              columns = c("ENTREZID","SYMBOL"))
+HN_CX_temp <- merge(HN_CX, geneIDs1, by.x = "V1", by.y = "ENTREZID")
+HN_CX_temp <- unique(HN_CX_temp)
+colnames(HN_CX_temp)[names(HN_CX_temp) == "SYMBOL"] <- "Gene1"
+HN_CX_temp %>% dplyr::filter(Gene1 == "")
+
+HN_CX_temp <- merge(HN_CX_temp, geneIDs2, by.x = "V2", by.y = "ENTREZID")
+HN_CX_temp <- unique(HN_CX_temp)
+colnames(HN_CX_temp)[names(HN_CX_temp) == "SYMBOL"] <- "Gene2"
+HN_CX_temp %>% dplyr::filter(Gene2 == "")
+HN_CX <- HN_CX_temp %>% dplyr::select(Gene1, Gene2)
+```
+
+
+Other functional interactions
+```{r}
+first_col <- HN_funct$V1
+first_col <- as.character(first_col)
+geneIDs1 <- ensembldb::select(EnsDb.Hsapiens.v86, keys = first_col, keytype = "ENTREZID", 
+                              columns = c("ENTREZID","SYMBOL"))
+
+sec_col <- HN_funct$V2
+sec_col <- as.character(sec_col)
+geneIDs2 <- ensembldb::select(EnsDb.Hsapiens.v86, keys = sec_col, keytype = "ENTREZID", 
+                              columns = c("ENTREZID","SYMBOL"))
+
+HN_funct_temp <- merge(HN_funct, geneIDs1, by.x = "V1", by.y = "ENTREZID")
+HN_funct_temp <- unique(HN_funct_temp)
+colnames(HN_funct_temp)[names(HN_funct_temp) == "SYMBOL"] <- "Gene1"
+HN_funct_temp %>% dplyr::filter(Gene1 == "")
+
+HN_funct_temp <- merge(HN_funct_temp, geneIDs2, by.x = "V2", by.y = "ENTREZID")
+HN_funct_temp <- unique(HN_funct_temp)
+colnames(HN_funct_temp)[names(HN_funct_temp) == "SYMBOL"] <- "Gene2"
+HN_funct_temp %>% dplyr::filter(Gene2 == "")
+HN_funct <- HN_funct_temp %>% dplyr::select(Gene1, Gene2)
+```
+
+
+## Automated way for all modules 
+dataframe with all modules and their respective genes
+```{r}
+B <- modulesAD %>% group_by(Module) %>% mutate(rid = row_number()) %>% spread(Module, Gene)
+for (i in 2:length(names(B))){
+  names(B)[i] <- paste0('module', names(B)[i])
+}
+B_MDD <- modulesMDD %>% group_by(Module) %>% mutate(rid = row_number()) %>% spread(Module, Gene)
+for (i in 2:length(names(B_MDD))){
+  names(B_MDD)[i] <- paste0('module', names(B_MDD)[i])
+}
+colnames(B)
+colnames(B_MDD)
+```
+
+### AD 
+PPI
+```{r}
+B <- B %>% dplyr::select(-rid)
+PI_AD <- data.frame(Gene1 = "", Gene2 = "", Module = "")
+for (i in (1:length(B))){
+  module_of_interest <- B[, i]
+  genes_module <-  module_of_interest[,1] %>% unlist() # remains tibble otherwise
+  PI_module <- HN_PI %>% filter(Gene1 %in% genes_module) %>% 
+                                  filter(Gene2 %in% genes_module) %>%
+                                  add_column("Module" = i)
+  PI_AD <- rbind(PI_AD, PI_module)
+}
+PI_AD <- PI_AD %>% dplyr::select(Module, Gene1, Gene2)
+PI_AD <- PI_AD %>% dplyr::slice(-1)
+write.table(PI_AD, file = "Ens_HumanNet_PI_AD.mvf", row.names = F, col.names = F, sep = "\t", quote = F)
+```
+ready for ModuleViewer, only need to add header
+
+CX
+```{r}
+CX_AD <- data.frame(Gene1 = "", Gene2 = "", Module = "")
+for (i in (1:length(B))){
+  module_of_interest <- B[, i]
+  genes_module <-  module_of_interest[,1] %>% unlist() # remains tibble otherwise
+  CX_module <- HN_CX %>% filter(Gene1 %in% genes_module) %>% 
+                                  filter(Gene2 %in% genes_module) %>%
+                                  add_column("Module" = i)
+  CX_AD <- rbind(CX_AD, CX_module)
+}
+CX_AD <- CX_AD %>% dplyr::select(Module, Gene1, Gene2)
+CX_AD <- CX_AD %>% dplyr::slice(-1)
+write.table(CX_AD, file = "Ens_HumanNet_CX_AD.mvf", row.names = F, col.names = F, sep = "\t", quote = F)
+```
+
+
+Other functional interactions
+```{r}
+funct <- data.frame(Gene1 = "", Gene2 = "", Module = "")
+for (i in (1:length(B))){
+  module_of_interest <- B[, i]
+  genes_module <-  module_of_interest[,1] %>% unlist() # remains tibble otherwise
+  func_module <- HN_funct %>% dplyr::filter(Gene1 %in% genes_module) %>% 
+                                  dplyr::filter(Gene2 %in% genes_module) %>%
+                                  add_column("Module" = i)
+  funct <- rbind(funct, func_module)
+}
+funct <- funct %>% dplyr::select(Module, Gene1, Gene2)
+funct <- funct %>% dplyr::slice(-1)
+write.table(funct, file = "Ens_HumanNet_Funct_AD.mvf", row.names = F, col.names = F, sep = "\t", quote = F)
+```
+
+### MDD
+PPI
+```{r}
+B_MDD <- B_MDD %>% dplyr::select(-rid)
+PI_MDD <- data.frame(Gene1 = "", Gene2 = "", Module = "")
+for (i in (1:length(B_MDD))){
+  module_of_interest <- B_MDD[, i]
+  genes_module <-  module_of_interest[,1] %>% unlist() # remains tibble otherwise
+  PI_module <- HN_PI %>% filter(Gene1 %in% genes_module) %>% 
+                                  filter(Gene2 %in% genes_module) %>%
+                                  add_column("Module" = i)
+  PI_MDD <- rbind(PI_MDD, PI_module)
+}
+PI_MDD <- PI_MDD %>% dplyr::select(Module, Gene1, Gene2)
+PI_MDD <- PI_MDD %>% dplyr::slice(-1)
+write.table(PI_MDD, file = "Ens_HumanNet_PI_MDD.mvf", row.names = F, col.names = F, sep = "\t", quote = F)
+```
+
+CX
+```{r}
+CX_MDD <- data.frame(Gene1 = "", Gene2 = "", Module = "")
+for (i in (1:length(B_MDD))){
+  module_of_interest <- B_MDD[, i]
+  genes_module <-  module_of_interest[,1] %>% unlist() # remains tibble otherwise
+  CX_module <- HN_CX %>% filter(Gene1 %in% genes_module) %>% 
+                                  filter(Gene2 %in% genes_module) %>%
+                                  add_column("Module" = i)
+  CX_MDD <- rbind(CX_MDD, CX_module)
+}
+CX_MDD <- CX_MDD %>% dplyr::select(Module, Gene1, Gene2)
+CX_MDD <- CX_MDD %>% dplyr::slice(-1)
+write.table(CX_MDD, file = "Ens_HumanNet_CX_MDD.mvf", row.names = F, col.names = F, sep = "\t", quote = F)
+```
+
+Other functional interactions
+```{r}
+funct_MDD <- data.frame(Gene1 = "", Gene2 = "", Module = "")
+for (i in (1:length(B_MDD))){
+  module_of_interest <- B_MDD[, i]
+  genes_module <-  module_of_interest[,1] %>% unlist() # remains tibble otherwise
+  func_module <- HN_funct %>% dplyr::filter(Gene1 %in% genes_module) %>% 
+                                  dplyr::filter(Gene2 %in% genes_module) %>%
+                                  add_column("Module" = i)
+  funct_MDD <- rbind(funct_MDD, func_module)
+}
+funct_MDD <- funct_MDD %>% dplyr::select(Module, Gene1, Gene2)
+funct_MDD <- funct_MDD %>% dplyr::slice(-1)
+write.table(funct_MDD, file = "Ens_HumanNet_Funct_MDD.mvf", row.names = F, col.names = F, sep = "\t", quote = F)
+```
+
+# Add PPI and co-expression to TFs
+```{r}
+regAD <- read.table("reg_clust_ens_AD.txt", header = F, sep = "\t")
+regMDD <- read.table("reg_clust_ens_MDD.txt", header = F, sep = "\t")
+colnames(regAD) <- c("TF", "Module")
+colnames(regMDD) <- c("TF", "Module")
+```
+
+```{r}
+B_reg_AD <- regAD %>% group_by(Module) %>% mutate(rid = row_number()) %>% spread(Module, TF)
+for (i in 2:length(names(B_reg_AD))){
+  names(B_reg_AD)[i] <- paste0('module', names(B_reg_AD)[i])
+}
+B_reg_MDD <- regMDD %>% group_by(Module) %>% mutate(rid = row_number()) %>% spread(Module, TF)
+for (i in 2:length(names(B_reg_MDD))){
+  names(B_reg_MDD)[i] <- paste0('module', names(B_reg_MDD)[i])
+}
+colnames(B_reg_AD) # 28 is out
+B_reg_AD <- B_reg_AD %>% add_column("module28" = "", .after = "module27")
+colnames(B_reg_AD)
+colnames(B_reg_MDD) # module 5 is out
+B_reg_MDD <- B_reg_MDD %>% add_column("module5" = "", .after = "module4")
+```
+
+## PPI
+```{r}
+B_reg_AD <- B_reg_AD %>% dplyr::select(-rid)
+PI <- data.frame(Gene1 = "", Gene2 = "", Module = "")
+for (i in (1:length(B_reg_AD))){
+  module_of_interest <- B_reg_AD[, i]
+  genes_module <-  module_of_interest[,1] %>% unlist() # remains tibble otherwise
+  PI_module <- HN_PI %>% dplyr::filter(Gene1 %in% genes_module) %>% 
+                                  dplyr::filter(Gene2 %in% genes_module) %>%
+                                  add_column("Module" = i)
+  PI <- rbind(PI, PI_module)
+}
+PI <- PI %>% dplyr::select(Module, Gene1, Gene2)
+PI <- PI %>% dplyr::slice(-1)
+PI <- unique(PI)
+write.table(PI, file = "Ens_HumanNet_PI_reg_AD.mvf", row.names = F, col.names = F, sep = "\t", quote = F)
+```
+
+```{r}
+B_reg_MDD <- B_reg_MDD %>% dplyr::select(-rid)
+PI <- data.frame(Gene1 = "", Gene2 = "", Module = "")
+for (i in (1:length(B_reg_MDD))){
+  module_of_interest <- B_reg_MDD[, i]
+  genes_module <-  module_of_interest[,1] %>% unlist() # remains tibble otherwise
+  PI_module <- HN_PI %>% dplyr::filter(Gene1 %in% genes_module) %>% 
+                                  dplyr::filter(Gene2 %in% genes_module) %>%
+                                  add_column("Module" = i)
+  PI <- rbind(PI, PI_module)
+}
+PI <- PI %>% dplyr::select(Module, Gene1, Gene2)
+PI <- PI %>% dplyr::slice(-1)
+PI <- unique(PI)
+write.table(PI, file = "Ens_HumanNet_PI_reg_MDD.mvf", row.names = F, col.names = F, sep = "\t", quote = F)
+```
+
+## Co-expression 
+
+```{r}
+CX_AD <- data.frame(Gene1 = "", Gene2 = "", Module = "")
+for (i in (1:length(B_reg_AD))){
+  module_of_interest <- B_reg_AD[, i]
+  genes_module <-  module_of_interest[,1] %>% unlist() # remains tibble otherwise
+  CX_module <- HN_CX %>% dplyr::filter(Gene1 %in% genes_module) %>% 
+                                  dplyr::filter(Gene2 %in% genes_module) %>%
+                                  add_column("Module" = i)
+  CX_AD <- rbind(CX_AD, CX_module)
+}
+CX_AD <- CX_AD %>% dplyr::select(Module, Gene1, Gene2)
+CX_AD <- CX_AD %>% dplyr::slice(-1)
+write.table(CX_AD, file = "Ens_HumanNet_CX_reg_AD.mvf", row.names = F, col.names = F, sep = "\t", quote = F)
+```
+
+```{r}
+CX_MDD <- data.frame(Gene1 = "", Gene2 = "", Module = "")
+for (i in (1:length(B_reg_MDD))){
+  module_of_interest <- B_reg_MDD[, i]
+  genes_module <-  module_of_interest[,1] %>% unlist() # remains tibble otherwise
+  CX_module <- HN_CX %>% dplyr::filter(Gene1 %in% genes_module) %>% 
+                                  dplyr::filter(Gene2 %in% genes_module) %>%
+                                  add_column("Module" = i)
+  CX_MDD <- rbind(CX_MDD, CX_module)
+}
+CX_MDD <- CX_MDD %>% dplyr::select(Module, Gene1, Gene2)
+CX_MDD <- CX_MDD %>% dplyr::slice(-1)
+write.table(CX_MDD, file = "Ens_HumanNet_CX_reg_MDD.mvf", row.names = F, col.names = F, sep = "\t", quote = F)
+```
+
+
+## Other functional interactions
+```{r}
+funct_AD <- data.frame(Gene1 = "", Gene2 = "", Module = "")
+for (i in (1:length(B_reg_AD))){
+  module_of_interest <- B_reg_AD[, i]
+  genes_module <-  module_of_interest[,1] %>% unlist() # remains tibble otherwise
+  func_module <- HN_funct %>% dplyr::filter(Gene1 %in% genes_module) %>% 
+                                  dplyr::filter(Gene2 %in% genes_module) %>%
+                                  add_column("Module" = i)
+  funct_AD <- rbind(funct_AD, func_module)
+}
+funct_AD <- funct_AD %>% dplyr::select(Module, Gene1, Gene2)
+funct_AD <- funct_AD %>% dplyr::slice(-1)
+write.table(funct_AD, file = "Ens_HumanNet_funct_reg_AD.mvf", row.names = F, col.names = F, sep = "\t", quote = F)
+```
+
+
+```{r}
+funct_MDD <- data.frame(Gene1 = "", Gene2 = "", Module = "")
+for (i in (1:length(B_reg_MDD))){
+  module_of_interest <- B_reg_MDD[, i]
+  genes_module <-  module_of_interest[,1] %>% unlist() # remains tibble otherwise
+  func_module <- HN_funct %>% dplyr::filter(Gene1 %in% genes_module) %>% 
+                                  dplyr::filter(Gene2 %in% genes_module) %>%
+                                  add_column("Module" = i)
+  funct_MDD <- rbind(funct_MDD, func_module)
+}
+funct_MDD <- funct_MDD %>% dplyr::select(Module, Gene1, Gene2)
+funct_MDD <- funct_MDD %>% dplyr::slice(-1)
+write.table(funct_MDD, file = "Ens_HumanNet_funct_reg_MDD.mvf", row.names = F, col.names = F, sep = "\t", quote = F)
+```
+

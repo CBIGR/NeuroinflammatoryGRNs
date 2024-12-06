@@ -1,0 +1,610 @@
+---
+title: "Network characteristics single cell"
+author: "Hanne Puype"
+date: '2022-05-08'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Read in files
+```{r}
+library(tidyverse)
+networkAD_bulk <- read.table("../../ensemble_netw_AD.txt", 
+                             header = T, sep = "\t")
+networkAD_sc <- read.csv("SCENIC/Results AD/tableRegulons_AD.csv", sep = ";")
+networkMDD_bulk <- read.table("../../ensemble_netw_MDD.txt", 
+                              header = T, sep = "\t")
+networkMDD_sc <- read.csv("SCENIC/Results MDD/tableRegulons_MDD.csv", sep = ";")
+network_AD_sc <- read.table("edgelist_sc_AD.txt", sep = "\t", header = T)
+network_MDD_sc <- read.table("edgelist_sc_MDD.txt", sep = "\t", header = T)
+```
+
+keep only TF gene name
+make edge list with TF, gene name and keep 1's 
+```{r}
+head(networkAD_sc)
+colnames(networkAD_sc)
+colnames(networkAD_sc) <- sub("_.*", "", colnames(networkAD_sc))
+
+library(reshape2)
+network_AD_sc <- melt(networkAD_sc)
+head(network_AD_sc)
+colnames(network_AD_sc)[names(network_AD_sc) == "variable"] <- "regulator"
+dim(network_AD_sc)
+network_AD_sc %>% group_by(value) %>% summarise(n())
+network_AD_sc <- network_AD_sc %>% filter(value == 1)
+dim(network_AD_sc)
+head(network_AD_sc)
+write.table(network_AD_sc, file = "edgelist_sc_AD.txt", sep = "\t", quote = F, row.names = F, col.names = T)
+```
+
+```{r}
+head(networkMDD_sc)
+colnames(networkMDD_sc) <- sub("_.*", "", colnames(networkMDD_sc))
+
+network_MDD_sc <- melt(networkMDD_sc)
+head(network_MDD_sc)
+colnames(network_MDD_sc)[names(network_MDD_sc) == "variable"] <- "regulator"
+dim(network_MDD_sc)
+network_MDD_sc %>% group_by(value) %>% summarise(n())
+network_MDD_sc <- network_MDD_sc %>% filter(value == 1)
+dim(network_MDD_sc)
+head(network_MDD_sc)
+write.table(network_MDD_sc, file = "edgelist_sc_MDD.txt", sep = "\t", quote = F, row.names = F, col.names = T)
+```
+
+# Compare to bulk networks
+## Venn diagrams
+Format of edges to compare 
+```{r}
+networkAD_bulk$concat <- paste(networkAD_bulk$TF, networkAD_bulk$Target_gene, sep = ":")
+networkMDD_bulk$concat <- paste(networkMDD_bulk$TF, networkMDD_bulk$Target_gene, sep = ":")
+edgesAD_bulk <- networkAD_bulk$concat
+edgesMDD_bulk <- networkMDD_bulk$concat
+network_AD_sc$concat <- paste(network_AD_sc$regulator, network_AD_sc$gene, sep = ":")
+edgesAD_sc <- network_AD_sc$concat
+network_MDD_sc$concat <- paste(network_MDD_sc$regulator, network_MDD_sc$gene, sep = ":")
+edgesMDD_sc <- network_MDD_sc$concat
+```
+
+AD 
+```{r}
+library(BioVenn)
+edgesAD3 <- NULL
+venn_diag <- draw.venn(edgesAD3, edgesAD_bulk, edgesAD_sc, title = "Diagram of edges bulk vs single-cell", 
+                       nrtype = "abs", ytitle = "\n \nbulk", 
+                       ztitle = "\n\n single-cell", xtitle = "", subtitle = "AD", output = "png", 
+                       filename = "VennDiagram_bulksc_AD.png", t_s = 5, st_s = 4, xt_s = 4, yt_s = 4, zt_s = 4, 
+                       nr_s = 3, y_c = "salmon", z_c = "royalblue1")
+```
+
+MDD  
+```{r}
+edgesMDD3 <- NULL
+venn_diag <- draw.venn(edgesMDD3, edgesMDD_bulk, edgesMDD_sc, title = "Diagram of edges bulk vs single-cell", 
+                       nrtype = "abs", ytitle = "\n\nbulk", 
+                       ztitle = "\n\n single-cell", xtitle = "", subtitle = "MDD", output = "png", 
+                       filename = "VennDiagram_bulksc_MDD.png", t_s = 5, st_s = 4, xt_s = 4, yt_s = 4, zt_s = 4, 
+                       nr_s = 3, y_c = "salmon", z_c = "royalblue1")
+```
+
+## Jaccard index 
+```{r}
+jaccard <- function(a, b) {
+    intersection = length(intersect(a, b))
+    union = length(a) + length(b) - intersection
+    return (intersection/union)
+}
+```
+
+```{r}
+jaccard(edgesAD_bulk, edgesAD_sc)
+1- jaccard(edgesAD_bulk, edgesAD_sc)
+jaccard(edgesMDD_bulk, edgesMDD_sc)
+1- jaccard(edgesMDD_bulk, edgesMDD_sc)
+```
+
+## Which edges are shared?
+Back to genes and TFs
+```{r}
+intersect_AD <- intersect(edgesAD_bulk, edgesAD_sc)
+intersect_MDD <- intersect(edgesMDD_bulk, edgesMDD_sc)
+AD_intersect <- as.data.frame(str_split_fixed(intersect_AD, ":", 2))
+MDD_intersect <- as.data.frame(str_split_fixed(intersect_MDD, ":", 2))
+```
+
+```{r}
+TFs_AD_intersect <- AD_intersect %>% group_by(V1) %>% summarise(n())
+TFs_AD_intersect %>% arrange(desc(`n()`)) # IKZF1, RUNX1, IRF8 and NFATC2 in top 10
+TFs_MDD_intersect <- MDD_intersect %>% group_by(V1) %>% summarise(n())
+TFs_MDD_intersect %>% arrange(desc(`n()`)) # IKZF1 and IRF8 in top 10
+```
+
+```{r}
+TGs_AD_intersect <- AD_intersect %>% group_by(V2) %>% summarise(n())
+TGs_AD_intersect %>% arrange(desc(`n()`)) 
+TGs_MDD_intersect <- MDD_intersect %>% group_by(V2) %>% summarise(n())
+TGs_MDD_intersect %>% arrange(desc(`n()`)) 
+```
+
+```{r}
+library(enrichR)
+dbs <- c("GO_Biological_Process_2021", "GO_Molecular_Function_2021", "KEGG_2021_Human", 
+         "Reactome_2016", "WikiPathway_2021_Human")
+enriched_shared_AD <- enrichr(AD_intersect$V2, dbs)
+enriched_shared_AD <- lapply(enriched_shared_AD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+enriched_shared_MDD <- enrichr(MDD_intersect$V2, dbs)
+enriched_shared_MDD <- lapply(enriched_shared_MDD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+
+lapply(enriched_shared_AD, function(x) write.table(data.frame(x), file = "FEA_shared_sc-bulk_AD.txt",
+                                           append = T, sep = '\t', quote = F))
+lapply(enriched_shared_MDD, function(x) write.table(data.frame(x), file = "FEA_shared_sc-bulk_MDD.txt",
+                                           append = T, sep = '\t', quote = F))
+```
+
+```{r fig.width=12}
+enriched_shared_AD[["GO_Biological_Process_2021"]][["Term"]] <- 
+  gsub("\\(.*", "", enriched_shared_AD[["GO_Biological_Process_2021"]][["Term"]])
+enriched_shared_AD[[2]][["Term"]] <- gsub("\\(.*", "", enriched_shared_AD[[2]][["Term"]])
+enriched_shared_AD[[4]][["Term"]] <- gsub(" Homo.*", "", enriched_shared_AD[[4]][["Term"]])
+enriched_shared_AD[[5]][["Term"]] <- gsub(" WP.*", "", enriched_shared_AD[[5]][["Term"]])
+
+enriched_shared_AD[[1]][["P.value"]] <- enriched_shared_AD[[1]][["Adjusted.P.value"]]
+enriched_shared_AD[[2]][["P.value"]] <- enriched_shared_AD[[2]][["Adjusted.P.value"]]
+enriched_shared_AD[[3]][["P.value"]] <- enriched_shared_AD[[3]][["Adjusted.P.value"]]
+enriched_shared_AD[[4]][["P.value"]] <- enriched_shared_AD[[4]][["Adjusted.P.value"]]
+enriched_shared_AD[[5]][["P.value"]] <- enriched_shared_AD[[5]][["Adjusted.P.value"]]
+
+enrichR::plotEnrich(enriched_shared_AD[[1]], showTerms = 20, numChar = 140, y = "Count", orderBy = "P.value", 
+           title = "GO Biological Process overlap bulk and single cell \n AD networks") + theme(text=element_text(size=20))
+enrichR::plotEnrich(enriched_shared_AD[[2]], showTerms = 20, numChar = 140, y = "Count", orderBy = "P.value", 
+           title = "GO Molecular Function overlap bulk and single cell \n AD networks") + theme(text=element_text(size=20))
+enrichR::plotEnrich(enriched_shared_AD[[3]], showTerms = 20, numChar = 140, y = "Count", orderBy = "P.value", 
+           title = "KEGG overlap bulk and single cell \n AD networks") + theme(text=element_text(size=20))
+enrichR::plotEnrich(enriched_shared_AD[[4]], showTerms = 20, numChar = 140, y = "Count", orderBy = "P.value", 
+           title = "Reactome overlap bulk and single cell \n AD networks") + theme(text=element_text(size=20))
+enrichR::plotEnrich(enriched_shared_AD[[5]], showTerms = 20, numChar = 140, y = "Count", orderBy = "P.value", 
+           title = "WikiPathways overlap bulk and single cell \n AD networks") + theme(text=element_text(size=20))
+```
+
+```{r fig.width=12}
+enriched_shared_MDD[["GO_Biological_Process_2021"]][["Term"]] <- 
+  gsub("\\(.*", "", enriched_shared_MDD[["GO_Biological_Process_2021"]][["Term"]])
+enriched_shared_MDD[[2]][["Term"]] <- gsub("\\(.*", "", enriched_shared_MDD[[2]][["Term"]])
+enriched_shared_MDD[[4]][["Term"]] <- gsub(" Homo.*", "", enriched_shared_MDD[[4]][["Term"]])
+enriched_shared_MDD[[5]][["Term"]] <- gsub(" WP.*", "", enriched_shared_MDD[[5]][["Term"]])
+
+enriched_shared_MDD[[1]][["P.value"]] <- enriched_shared_MDD[[1]][["Adjusted.P.value"]]
+enriched_shared_MDD[[2]][["P.value"]] <- enriched_shared_MDD[[2]][["Adjusted.P.value"]]
+enriched_shared_MDD[[3]][["P.value"]] <- enriched_shared_MDD[[3]][["Adjusted.P.value"]]
+enriched_shared_MDD[[4]][["P.value"]] <- enriched_shared_MDD[[4]][["Adjusted.P.value"]]
+enriched_shared_MDD[[5]][["P.value"]] <- enriched_shared_MDD[[5]][["Adjusted.P.value"]]
+
+#p + labs(fill='MDDj. P value') # does not work 
+enrichR::plotEnrich(enriched_shared_MDD[[1]], showTerms = 20, numChar = 140, y = "Count", orderBy = "P.value", 
+           title = "GO Biological Process overlap bulk and single cell \n MDD networks") +
+  theme(text=element_text(size=20))
+enrichR::plotEnrich(enriched_shared_MDD[[2]], showTerms = 20, numChar = 140, y = "Count", orderBy = "P.value", 
+           title = "GO Molecular Function overlap bulk and single cell \n MDD networks") +
+  theme(text=element_text(size=20))
+enrichR::plotEnrich(enriched_shared_MDD[[3]], showTerms = 20, numChar = 140, y = "Count", orderBy = "P.value", 
+           title = "KEGG overlap bulk and single cell \n MDD networks") + theme(text=element_text(size=20))
+enrichR::plotEnrich(enriched_shared_MDD[[4]], showTerms = 20, numChar = 140, y = "Count", orderBy = "P.value", 
+           title = "Reactome overlap bulk and single cell \n MDD networks") + theme(text=element_text(size=20))
+enrichR::plotEnrich(enriched_shared_MDD[[5]], showTerms = 20, numChar = 140, y = "Count", orderBy = "P.value", 
+           title = "WikiPathways overlap bulk and single cell \n MDD networks") + theme(text=element_text(size=20))
+```
+
+
+## Overlap with modules
+```{r}
+modulesAD <- read.table("../kmed_modules_AD.txt", header = F, sep = "\t")
+modulesMDD <- read.table("../kmed_modules_MDD.txt", header = F, sep = "\t")
+colnames(modulesAD) <- c("Gene", "Module")
+colnames(modulesMDD) <- c("Gene", "Module")
+```
+
+overlap target genes of the overlap and the module genes 
+for every module, how large is the overlap 
+
+```{r}
+df <- data.frame("Module" = numeric(0), "Overlap" = numeric(0), "Percentage" = numeric(0))
+for (module in unique(modulesAD$Module)) {
+  modulesAD_f <- modulesAD %>% filter(Module == module)
+  nr_overlap <- length(intersect(modulesAD_f$Gene, AD_intersect$V2))
+  perc_overlap <- nr_overlap/length(modulesAD_f$Gene)
+  df[module,] <- c(module, nr_overlap, perc_overlap)
+}
+head(df %>% arrange(desc(Percentage)), 111) # module 39 and 22 high overlap
+```
+
+```{r}
+df <- data.frame("Module" = numeric(0), "Overlap" = numeric(0), "Percentage" = numeric(0))
+for (module in unique(modulesMDD$Module)) {
+  modulesMDD_f <- modulesMDD %>% filter(Module == module)
+  nr_overlap <- length(intersect(modulesMDD_f$Gene, MDD_intersect$V2))
+  perc_overlap <- nr_overlap/length(modulesMDD_f$Gene)
+  df[module,] <- c(module, nr_overlap, perc_overlap)
+}
+head(df %>% arrange(desc(Percentage)), 116) # lower percentages compared to AD
+```
+
+# Compare single-cell networks to each other 
+## Venn diagrams
+```{r}
+venn_diag <- draw.venn(edgesAD3, edgesAD_sc, edgesMDD_sc, title = "Venn diagram of edges", nrtype = "abs", 
+                       ytitle = "\n\n\nAD", ztitle = "\n\n\n  MDD", xtitle = "", subtitle = "single-cell", 
+                       output = "png", filename = "VennDiagram_sc.png", t_s = 5, st_s = 4, xt_s = 4, yt_s = 4, 
+                       zt_s = 4, nr_s = 3, y_c = "salmon", z_c = "royalblue1")
+```
+
+## Jaccard index 
+```{r}
+jaccard(edgesAD_sc, edgesMDD_sc)
+1 - jaccard(edgesAD_sc, edgesMDD_sc)
+```
+
+# Hubs in networks
+```{r}
+head(network_AD_sc)
+regAD <- network_AD_sc$regulator
+regAD <- as.data.frame(table(regAD)) # frequency TF --> ~ out-degree
+regAD <- regAD %>% arrange(desc(Freq))
+head(regAD)
+regAD$regAD <- as.character(regAD$regAD) # are factors
+
+head(network_MDD_sc)
+regMDD <- network_MDD_sc$regulator
+regMDD <- as.data.frame(table(regMDD))
+regMDD <- regMDD %>% arrange(desc(Freq))
+head(regMDD)
+regMDD$regMDD <- as.character(regMDD$regMDD)
+```
+
+
+```{r}
+regAD <- regAD %>% slice(c(1:100)) %>% select(regAD)
+regAD <- regAD$regAD
+print(regAD, quote = F)
+regMDD <- regMDD %>% slice(c(1:100)) %>% select(regMDD)
+regMDD <- regMDD$regMDD
+print(regMDD, quote = F)
+common_reg <- Reduce(intersect, list(regAD, regMDD)) 
+length(common_reg)
+print(common_reg, quote = F)
+```
+
+Shared with bulk hubs 
+```{r}
+Hubs_bulk_AD <- read.table("../Hubs_AD_bulk.txt")
+Hubs_bulk_AD <- Hubs_bulk_AD$x
+Hubs_bulk_MDD <- read.table("../Hubs_MDD_bulk.txt")
+Hubs_bulk_MDD <- Hubs_bulk_MDD$x
+print(intersect(regAD, Hubs_bulk_AD), quote = F)
+print(intersect(regMDD, Hubs_bulk_MDD), quote = F)
+```
+
+# Number of nodes
+```{r}
+genes <- network_AD_sc$gene
+genes <- unique(genes)
+length(genes) # 6001
+regulators_AD <- network_AD_sc$regulator
+regulators_AD <- unique(regulators_AD)
+length(regulators_AD) #359
+nodes_AD <- c(genes, regulators_AD)
+nodes_AD <- unique(nodes_AD)
+length(nodes_AD) #6360
+
+genes_MDD <- network_MDD_sc$gene
+genes_MDD <- unique(genes_MDD)
+length(genes_MDD) #4549
+regulators_MDD <- network_MDD_sc$regulator
+regulators_MDD <- unique(regulators_MDD)
+length(regulators_MDD) # 265
+nodes_MDD <- c(genes_MDD, regulators_MDD)
+nodes_MDD <- unique(nodes_MDD)
+length(nodes_MDD) #4814
+```
+
+
+# Regulators in common
+All regulators 
+```{r}
+head(networkAD_bulk)
+regAD_bulk <- networkAD_bulk$TF
+regAD_bulk <- as.data.frame(table(regAD_bulk))
+regAD_bulk <- regAD_bulk %>% arrange(desc(Freq))
+head(regAD_bulk)
+regAD_bulk$regAD_bulk <- as.character(regAD_bulk$regAD_bulk)
+regAD_bulk <- regAD_bulk$regAD_bulk
+
+head(networkMDD_bulk)
+regMDD_bulk <- networkMDD_bulk$TF
+regMDD_bulk <- as.data.frame(table(regMDD_bulk))
+regMDD_bulk <- regMDD_bulk %>% arrange(desc(Freq))
+head(regMDD_bulk)
+regMDD_bulk$regMDD_bulk <- as.character(regMDD_bulk$regMDD_bulk)
+regMDD_bulk <- regMDD_bulk$regMDD_bulk
+```
+
+```{r}
+regcommon_AD <- intersect(regulators_AD, regAD_bulk)
+length(regcommon_AD) #258
+regcommon_MDD <- intersect(regulators_MDD, regMDD_bulk)
+length(regcommon_MDD) #238
+regcommon_sc <- intersect(regulators_AD, regulators_MDD)
+length(regcommon_sc) #168
+```
+
+# Graphs with igraph
+```{r}
+library(igraph)
+head(network_AD_sc)
+network_AD_sc <- network_AD_sc %>% select(regulator, gene, value)
+igraph_options(annotate.plot = T)
+graph_AD <- graph_from_data_frame(network_AD_sc, directed = T)
+pdf("graph_AD_sc.pdf", 
+    width = 9, height = 8, 
+    family = "ArialMT")
+plot(graph_AD, vertex.label = NA, main = "Graph of single-cell network of AD", vertex.color = "#88CCEE")
+dev.off()
+```
+
+```{r}
+head(network_MDD_sc)
+network_MDD_sc <- network_MDD_sc %>% select(regulator, gene, value)
+graph_MDD <- graph_from_data_frame(network_MDD_sc, directed = T)
+pdf("graph_MDD_sc.pdf", 
+    width = 9, height = 8, 
+    family = "ArialMT")
+plot(graph_MDD, vertex.label = NA, main = "Graph of single-cell networks of MDD", vertex.color = "#88CCEE")
+dev.off()
+```
+
+
+# Microglial networks
+IKZF1, IRF8, MAF, NFATC2, RUNX1 and TAL1 and SPI1  
+```{r}
+head(network_AD_sc)
+micro_netw_AD <- network_AD_sc %>% filter(regulator == "IKZF1" | regulator == "IRF8" | regulator == "NFATC2" | 
+                                            regulator == "RUNX1" | regulator == "TAL1" | regulator == "SPI1"| regulator == "MAF")
+dim(micro_netw_AD)
+```
+
+```{r}
+micro_netw_AD %>% group_by(regulator) %>% summarise(n())
+length(micro_netw_AD$gene)
+length(unique(micro_netw_AD$gene))
+write.table(micro_netw_AD, file = "micro_netw_AD.tsv", sep = "\t", quote = F, col.names = T, row.names = F)
+micro_netw_AD %>% filter(gene == "TYROBP")
+```
+
+```{r}
+head(network_MDD_sc)
+micro_netw_MDD <- network_MDD_sc %>% filter(regulator == "IKZF1" | regulator == "IRF8" | regulator == "MAF" |
+                                            regulator == "RUNX1" | regulator == "TAL1" | regulator == "SPI1")
+dim(micro_netw_MDD)
+```
+
+```{r}
+micro_netw_MDD %>% group_by(regulator) %>% summarise(n())
+length(unique(micro_netw_MDD$gene))
+write.table(micro_netw_MDD, file = "micro_netw_MDD.tsv", sep = "\t", quote = F, col.names = T, row.names = F)
+micro_netw_MDD %>% filter(gene == "TYROBP")
+```
+
+Networks from AD too big to visualize --> regulators only
+```{r}
+reg_micro_AD <- micro_netw_AD %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | gene == "MAF" |
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+reg_micro_AD
+write.table(reg_micro_AD, file = "reg_micro_AD.txt", sep = "\t", quote = F, col.names = T, row.names = F)
+```
+
+```{r}
+reg_micro_MDD <- micro_netw_MDD %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | gene == "MAF" |
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+reg_micro_MDD
+write.table(reg_micro_MDD, file = "reg_micro_MDD.txt", sep = "\t", quote = F, col.names = T, row.names = F)
+```
+
+### Other co-regulatory networks
+
+```{r}
+core_netw_AD <- network_AD_sc %>% filter(regulator == "CEBPD" | regulator == "MYC" | regulator == "STAT3" | 
+                                            regulator == "JUNB" | regulator == "MAFF" | regulator == "FOS" | regulator == "PLSCR1")
+core_netw_MDD <- network_MDD_sc %>% filter(regulator == "CEBPD" | regulator == "MYC" | regulator == "STAT3" | 
+                                            regulator == "JUNB" | regulator == "MAFF" | regulator == "FOS" | regulator == "PLSCR1")
+dim(core_netw_AD)
+dim(core_netw_MDD)
+```
+
+```{r}
+core_netw_MDD <- core_netw_MDD %>% filter(gene == "CEBPD" | gene == "FOS" | gene == "JUNB" | 
+                          gene == "MYC" | gene == "STAT3" | gene == "MAFF" | gene == "PLSCR1")
+core_netw_MDD
+write.table(core_netw_MDD, file = "reg_core2_MDD.txt", sep = "\t", quote = F, col.names = T, row.names = F)
+```
+
+```{r}
+core_netw_AD <- core_netw_AD %>% filter(gene == "CEBPD" | gene == "FOS" | gene == "JUNB" | 
+                          gene == "MYC" | gene == "STAT3" | gene == "MAFF" | gene == "PLSCR1")
+core_netw_AD
+write.table(core_netw_AD, file = "reg_core2_AD.txt", sep = "\t", quote = F, col.names = T, row.names = F)
+```
+
+```{r}
+network_MDD_sc %>% filter(gene == "MAFF")
+network_MDD_sc %>% filter(gene == "MYC")
+network_MDD_sc %>% filter(gene == "PLSCR1")
+```
+
+### Take the two networks together
+```{r}
+core_netws_AD <- network_AD_sc %>% filter(regulator == "IKZF1" | regulator == "IRF8" | regulator == "NFATC2" | 
+                                            regulator == "RUNX1" | regulator == "TAL1" | regulator == "SPI1"|
+                                            regulator == "MAF"| regulator == "CEBPD" | regulator == "MYC" | 
+                                            regulator == "STAT3" |  regulator == "JUNB" | regulator == "MAFF" |
+                                            regulator == "FOS" | regulator == "PLSCR1")
+core_netws_AD <- core_netws_AD %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | gene == "MAF" |
+                                            gene == "RUNX1" | gene == "TAL1" | gene == "SPI1" | gene == "CEBPD" |
+                                            gene == "FOS" |  gene == "JUNB" | gene == "MYC" | gene == "STAT3" | 
+                                            gene == "MAFF" | gene == "PLSCR1")
+core_netws_AD
+write.table(core_netws_AD, file = "reg_core_full_AD.txt", sep = "\t", quote = F, col.names = T, row.names = F)
+```
+
+```{r}
+core_netws_MDD <- network_MDD_sc %>% filter(regulator == "IKZF1" | regulator == "IRF8" | regulator == "RUNX1" | 
+                                              regulator == "TAL1" | regulator == "SPI1" |regulator == "CEBPD" | 
+                                              regulator == "MYC" | regulator == "STAT3" | regulator == "JUNB" | 
+                                              regulator == "MAFF" | regulator == "FOS" | regulator == "PLSCR1")
+core_netws_MDD <- core_netws_MDD %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | gene == "MAF" |
+                                              gene == "RUNX1" | gene == "TAL1" | gene == "SPI1" |gene == "CEBPD" | 
+                                              gene == "FOS" | gene == "JUNB" | gene == "MYC" | gene == "STAT3" | 
+                                              gene == "MAFF" | gene == "PLSCR1")
+core_netws_MDD
+write.table(core_netws_MDD, file = "reg_core_full_MDD.txt", sep = "\t", quote = F, col.names = T, row.names = F)
+```
+
+
+# Check why certain genes not in networks 
+Not sure if I need to check genes in the AD dataset, it's mostly the MDD dataset
+```{r}
+library(Seurat)
+SeuratObj_MDD <- readRDS("Seurat_MDD.rds")
+gene_names_MDD <- SeuratObj_MDD@assays[["RNA"]]@counts@Dimnames[[1]]
+length(gene_names_MDD)
+```
+
+So I need to check CEBPD, FOS, JUNB, MAFF, MYC, PLSCR1, STAT3, MAF, TFEC
+```{r}
+"CEBPD" %in% gene_names_MDD
+"FOS" %in% gene_names_MDD
+"JUNB" %in% gene_names_MDD
+"MAFF" %in% gene_names_MDD
+"MYC" %in% gene_names_MDD
+"PLSCR1" %in% gene_names_MDD
+"STAT3" %in% gene_names_MDD
+"MAF" %in% gene_names_MDD
+"TFEC" %in% gene_names_MDD
+```
+
+
+# Known interactions for core networks
+## Protein-protein interactions from HumanNet
+```{r}
+HN_PI <- read.table("../HumanNet/HS-PI.tsv")
+```
+
+```{r}
+library(annotate)
+library(org.Hs.eg.db)
+library(EnsDb.Hsapiens.v86)
+first_col <- HN_PI$V1
+first_col <- as.character(first_col)
+geneIDs1 <- ensembldb::select(EnsDb.Hsapiens.v86, keys = first_col, keytype = "ENTREZID", 
+                              columns = c("ENTREZID","SYMBOL"))
+
+sec_col <- HN_PI$V2
+sec_col <- as.character(sec_col)
+geneIDs2 <- ensembldb::select(EnsDb.Hsapiens.v86, keys = sec_col, keytype = "ENTREZID", 
+                              columns = c("ENTREZID","SYMBOL"))
+
+HN_PI_temp <- merge(HN_PI, geneIDs1, by.x = "V1", by.y = "ENTREZID")
+HN_PI_temp <- unique(HN_PI_temp)
+colnames(HN_PI_temp)[names(HN_PI_temp) == "SYMBOL"] <- "Gene1"
+HN_PI_temp %>% dplyr::filter(Gene1 == "")
+
+HN_PI_temp <- merge(HN_PI_temp, geneIDs2, by.x = "V2", by.y = "ENTREZID")
+HN_PI_temp <- unique(HN_PI_temp)
+colnames(HN_PI_temp)[names(HN_PI_temp) == "SYMBOL"] <- "Gene2"
+HN_PI_temp %>% dplyr::filter(Gene2 == "")
+HN_PI <- HN_PI_temp %>% dplyr::select(Gene1, Gene2)
+```
+
+```{r}
+HN_PI_core <- HN_PI %>% filter(Gene1 == "IRF8" | Gene1 == "NFATC2" | Gene1 == " RUNX1" | Gene1 == "SPI1" | 
+                                 Gene1 == "MAF" |Gene1 == "IKZF1" | Gene1 == "TAL1" | Gene1 == " FOS" | 
+                                 Gene1 == "JUNB" | Gene1 == "STAT3" |
+                                 Gene1 == "PLSCR1" | Gene1 == "CEBPD" | Gene1 == "MYC" | Gene1 == "MAFF")
+HN_PI_core <- HN_PI_core %>% filter(Gene2 == "IRF8" | Gene2 == "NFATC2" | Gene2 == " RUNX1" | Gene2 == "SPI1" | 
+                                      Gene2 == "MAF" | Gene2 == "IKZF1" | Gene2 == "TAL1" | Gene2 == " FOS" | 
+                                      Gene2 == "JUNB" | Gene2 == "STAT3" | Gene2 == "PLSCR1" | Gene2 == "CEBPD" |
+                                      Gene2 == "MYC" | Gene2 == "MAFF")
+HN_PI_core
+write.table(HN_PI_core, file = "HN_PI_core.txt", row.names = F, col.names = T, sep = "\t", quote = F)
+```
+
+## Co-expression 
+```{r}
+HN_CX <- read.table("../HumanNet/HS-CX.tsv")
+```
+
+```{r}
+first_col <- HN_CX$V1
+first_col <- as.character(first_col)
+geneIDs1 <- ensembldb::select(EnsDb.Hsapiens.v86, keys = first_col, keytype = "ENTREZID", 
+                              columns = c("ENTREZID","SYMBOL"))
+
+sec_col <- HN_CX$V2
+sec_col <- as.character(sec_col)
+geneIDs2 <- ensembldb::select(EnsDb.Hsapiens.v86, keys = sec_col, keytype = "ENTREZID", 
+                              columns = c("ENTREZID","SYMBOL"))
+
+HN_CX_temp <- merge(HN_CX, geneIDs1, by.x = "V1", by.y = "ENTREZID")
+HN_CX_temp <- unique(HN_CX_temp)
+colnames(HN_CX_temp)[names(HN_CX_temp) == "SYMBOL"] <- "Gene1"
+HN_CX_temp %>% dplyr::filter(Gene1 == "")
+
+HN_CX_temp <- merge(HN_CX_temp, geneIDs2, by.x = "V2", by.y = "ENTREZID")
+HN_CX_temp <- unique(HN_CX_temp)
+colnames(HN_CX_temp)[names(HN_CX_temp) == "SYMBOL"] <- "Gene2"
+HN_CX_temp %>% dplyr::filter(Gene2 == "")
+HN_CX <- HN_CX_temp %>% dplyr::select(Gene1, Gene2)
+```
+
+```{r}
+HN_CX_core <- HN_CX %>% filter(Gene1 == "IRF8" | Gene1 == "NFATC2" | Gene1 == " RUNX1" | Gene1 == "SPI1" | 
+                                 Gene1 == "MAF" |  Gene1 == "IKZF1" | Gene1 == "TAL1" | Gene1 == " FOS" | 
+                                 Gene1 == "JUNB" | Gene1 == "STAT3" |  Gene1 == "PLSCR1" | Gene1 == "CEBPD" | 
+                                 Gene1 == "MYC" | Gene1 == "MAFF")
+HN_CX_core <- HN_CX_core %>% filter(Gene2 == "IRF8" | Gene2 == "NFATC2" | Gene2 == " RUNX1" | Gene2 == "SPI1" | 
+                                      Gene2 == "MAF" | Gene2 == "IKZF1" | Gene2 == "TAL1" | Gene2 == " FOS" | 
+                                      Gene2 == "JUNB" | Gene2 == "STAT3" | Gene2 == "PLSCR1" | Gene2 == "CEBPD" |
+                                      Gene2 == "MYC" | Gene2 == "MAFF")
+HN_CX_core
+write.table(HN_CX_core, file = "HN_CX_core.txt", row.names = F, col.names = T, sep = "\t", quote = F)
+```
+
+## Known regulatory interactions 
+```{r}
+OP <- read.delim("../Omnipath/Omnipath.txt")
+collecTRI <- read.delim("../Omnipath/CollecTRI.txt")
+OP_f <- bind_rows(OP, collecTRI)
+OP_f <- OP_f %>% select(source_genesymbol, target_genesymbol)
+
+OP_f_core <- OP_f %>% filter(source_genesymbol == "IRF8" | source_genesymbol == "NFATC2" | 
+                               source_genesymbol == " RUNX1" | source_genesymbol == "SPI1" | 
+                               source_genesymbol == "MAF" |source_genesymbol == "IKZF1" | 
+                               source_genesymbol == "TAL1" | source_genesymbol == " FOS" | 
+                               source_genesymbol == "JUNB" | source_genesymbol == "STAT3" | 
+                               source_genesymbol == "PLSCR1" | source_genesymbol == "CEBPD" | 
+                               source_genesymbol == "MYC" | source_genesymbol == "MAFF")
+OP_f_core <- OP_f_core %>% filter(target_genesymbol == "IRF8" | target_genesymbol == "NFATC2" | 
+                                    target_genesymbol == " RUNX1" | target_genesymbol == "SPI1" | 
+                                    target_genesymbol == "MAF" |target_genesymbol == "IKZF1" | 
+                                    target_genesymbol == "TAL1" | target_genesymbol == " FOS" | 
+                                    target_genesymbol == "JUNB" | target_genesymbol == "STAT3" | 
+                                    target_genesymbol == "PLSCR1" | target_genesymbol == "CEBPD" |
+                                    target_genesymbol == "MYC" | target_genesymbol == "MAFF")
+OP_f_core <- unique(OP_f_core)
+OP_f_core
+write.table(OP_f_core, file = "OmniPath_core.txt", row.names = F, col.names = T, sep = "\t", quote = F)
+```
+
+

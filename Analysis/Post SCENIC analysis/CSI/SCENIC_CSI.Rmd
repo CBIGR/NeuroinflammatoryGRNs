@@ -1,0 +1,202 @@
+---
+title: "SCENIC CSI"
+author: "Hanne Puype"
+date: "2023-03-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Install/load packages and load files 
+```{r}
+#library(devtools)
+#install_github("FloWuenne/scFunctions")
+#library(scFunctions)
+library(tidyverse)
+library(pheatmap)
+#install.packages("viridis")
+library(viridis)
+```
+
+```{r}
+regulonAUC_AD <- read.csv2("regulonAUC_AD.csv", header = T)
+regulonAUC_AD <- as.data.frame(regulonAUC_AD)
+regulonAUC_AD <- column_to_rownames(regulonAUC_AD, "X")
+regulonAUC_MDD <- read.csv2("regulonAUC_MDD.csv")
+regulonAUC_MDD <- column_to_rownames(regulonAUC_MDD, "X")
+```
+
+# Connection specificity index 
+https://github.com/FloWuenne/scFunctions/blob/master/Tutorials/process_SCENIC.md 
+Functions from above, was not able to install package
+```{r}
+calculate_csi <- function(regulonAUC,
+                          calc_extended = FALSE,
+                          verbose = FALSE){
+
+  compare_pcc <- function(vector_of_pcc,pcc){
+    pcc_larger <- length(vector_of_pcc[vector_of_pcc > pcc])
+    if(pcc_larger == length(vector_of_pcc)){
+      return(0)
+    }else{
+      return(length(vector_of_pcc))
+    }
+  }
+
+  calc_csi <- function(reg,reg2,pearson_cor){
+    test_cor <- pearson_cor[reg,reg2]
+    total_n <- ncol(pearson_cor)
+    pearson_cor_sub <- subset(pearson_cor,rownames(pearson_cor) == reg | rownames(pearson_cor) == reg2)
+
+    sums <- apply(pearson_cor_sub,MARGIN = 2, FUN = compare_pcc, pcc = test_cor)
+    fraction_lower <- length(sums[sums == nrow(pearson_cor_sub)]) / total_n
+    return(fraction_lower)
+  }
+
+  regulonAUC_sub <- regulonAUC
+
+  if(calc_extended == TRUE){
+    regulonAUC_sub <- subset(regulonAUC_sub,grepl("extended",rownames(regulonAUC_sub)))
+  } else if (calc_extended == FALSE){
+    regulonAUC_sub <- subset(regulonAUC_sub,!grepl("extended",rownames(regulonAUC_sub)))
+}
+
+  regulonAUC_sub <- t(regulonAUC_sub)
+
+  pearson_cor <- cor(regulonAUC_sub)
+  pearson_cor_df <- as.data.frame(pearson_cor)
+  pearson_cor_df$regulon_1 <- rownames(pearson_cor_df)
+  pearson_cor_long <- pearson_cor_df %>%
+    gather(regulon_2,pcc,-regulon_1) %>%
+    mutate("regulon_pair" = paste(regulon_1,regulon_2,sep="_"))
+
+
+  regulon_names <- unique(colnames(pearson_cor))
+  num_of_calculations <- length(regulon_names)*length(regulon_names)
+
+  csi_regulons <- data.frame(matrix(nrow=num_of_calculations,ncol = 3))
+
+  colnames(csi_regulons) <- c("regulon_1",
+                              "regulon_2",
+                              "CSI")
+
+  num_regulons <- length(regulon_names)
+
+  f <- 0
+  for(reg in regulon_names){
+    ## Check if user wants to print info
+    if(verbose == TRUE){
+      print(reg)
+      }
+    for(reg2 in regulon_names){
+      f <- f + 1
+
+      fraction_lower <- calc_csi(reg,reg2,pearson_cor)
+
+      csi_regulons[f,] <- c(reg,reg2,fraction_lower)
+
+    }
+  }
+  csi_regulons$CSI <- as.numeric(csi_regulons$CSI)
+  return(csi_regulons)
+}
+```
+
+```{r}
+plot_csi_modules <- function(csi_df,
+                             nclust = 10,
+                             font_size_regulons = 6){
+
+  ## subset csi data frame based on threshold
+  csi_test_mat <- csi_df %>%
+    spread(regulon_2,CSI)
+
+  future_rownames <- csi_test_mat$regulon_1
+  csi_test_mat <- as.matrix(csi_test_mat[,2:ncol(csi_test_mat)])
+  rownames(csi_test_mat) <- future_rownames
+  pdf("./csi_heatmap15_AD_w.pdf",
+       width = 15,
+       height = 20)
+  pheatmap(csi_test_mat,
+           show_colnames = FALSE,
+           color = viridis(n = 20),
+           cutree_cols = 15,
+           cutree_rows = 15,
+           fontsize_row = font_size_regulons,
+           cluster_cols = TRUE,
+           cluster_rows = TRUE,
+           treeheight_row = nclust,
+           treeheight_col = nclust,
+           clustering_distance_rows = "euclidean",
+           clustering_distance_cols = "euclidean",
+           width = 2000,
+           height = 6200)
+  dev.off()
+
+}
+```
+
+The final statistics that we want to calculate is the connection specificty index. The CSI is a measure of connectedness between the different regulons. Regulons that share high CSI likely are co-regulating downstream genes and are together responsible for cell function.  
+We can calculate the CSI scores for all regulon pairs based on the AUCs matrix for all regulons. Again, this function has a switch to either select high confidence regulons or run the CSI calculation only on _extended regulons (calc_extended = TRUE). Here we choose to calculate CSI only for high confidence regulons.
+```{r}
+regulons_csi <- calculate_csi(regulonAUC_AD,
+                              calc_extended = FALSE)
+```
+
+Once we have calculated the CSI values for all regulon pairs, we can visualize the regulon modules using the function plot_csi_modules, which will create a heatmap of the CSI values. The function has an argument that lets you change the number of clusters the heatmap is divided into via nclust.
+```{r fig.height=15}
+plot_csi_modules(regulons_csi,
+                 nclust = 15,
+                 font_size_regulons = 4)
+```
+
+## MDD
+```{r}
+regulons_csi_MDD <- calculate_csi(regulonAUC_MDD,
+                              calc_extended = FALSE)
+```
+
+```{r}
+plot_csi_modules(regulons_csi_MDD,
+                 nclust = 20,
+                 font_size_regulons = 4)
+```
+
+# Save clusters in file for UMAPs
+## AD
+```{r}
+csi_csi_wide <- regulons_csi %>%
+    spread(regulon_2,CSI)
+
+future_rownames <- csi_csi_wide$regulon_1
+csi_csi_wide <- as.matrix(csi_csi_wide[,2:ncol(csi_csi_wide)])
+rownames(csi_csi_wide) <- future_rownames
+  
+regulons_hclust <- hclust(dist(csi_csi_wide, method = "euclidean"))
+
+clusters <- cutree(regulons_hclust,k= 15)
+clusters_df <- data.frame("regulon" = names(clusters),
+                          "csi_cluster" = clusters)
+write.table(clusters_df, file = "regulonclusters15_AD.txt", col.names = T, row.names = F, quote = F, sep = "\t")
+```
+
+## MDD
+
+```{r}
+csi_csi_wide <- regulons_csi_MDD %>%
+    spread(regulon_2,CSI)
+
+future_rownames <- csi_csi_wide$regulon_1
+csi_csi_wide <- as.matrix(csi_csi_wide[,2:ncol(csi_csi_wide)])
+rownames(csi_csi_wide) <- future_rownames
+  
+regulons_hclust <- hclust(dist(csi_csi_wide, method = "euclidean"))
+
+clusters <- cutree(regulons_hclust, k= 15)
+clusters_df <- data.frame("regulon" = names(clusters),
+                          "csi_cluster" = clusters)
+write.table(clusters_df, file = "regulonclusters15_MDD.txt", col.names = T, row.names = F, quote = F, sep = "\t")
+```
+

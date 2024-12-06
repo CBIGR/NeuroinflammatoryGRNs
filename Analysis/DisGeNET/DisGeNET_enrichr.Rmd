@@ -1,0 +1,217 @@
+---
+title: "DisGeNET"
+author: "Hanne Puype"
+date: "2023-06-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Packages
+```{r}
+library(tidyverse)
+library(enrichR)
+```
+
+# Load datasets
+```{r}
+modulesAD <- read.table("kmed_modules_AD.txt", header = F, sep = "\t")
+modulesMDD <- read.table("kmed_modules_MDD.txt", header = F, sep = "\t")
+colnames(modulesAD) <- c("Gene", "Module")
+colnames(modulesMDD) <- c("Gene", "Module")
+modulesAD <- as_tibble(modulesAD)
+modulesMDD <- as_tibble(modulesMDD)
+
+B <- modulesAD %>% group_by(Module) %>% mutate(rid = row_number()) %>% spread(Module, Gene)
+for (i in 2:length(names(B))){
+  names(B)[i] <- paste0('module', names(B)[i])
+}
+B_MDD <- modulesMDD %>% group_by(Module) %>% mutate(rid = row_number()) %>% spread(Module, Gene)
+for (i in 2:length(names(B_MDD))){
+  names(B_MDD)[i] <- paste0('module', names(B_MDD)[i])
+}
+```
+
+# Enrichment analysis of modules in DisGeNET
+```{r}
+dbs <- c("DisGeNET")
+```
+
+AD 
+```{r eval=FALSE}
+modules <- paste0("module", c(1:155))
+modules_OI_AD <- c()
+for (module in modules){
+  modIds <- B[module]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  symbols <- modIds$GeneSymbol
+  enriched <- enrichr(symbols, dbs)
+  enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+  if (dim(as.data.frame(enriched[[1]]) %>% filter(grepl("Alz", Term, ignore.case = T)))[1] != 0) {
+      modules_OI_AD <- c(modules_OI_AD, module)
+}
+  lapply(enriched, function(x) write.table(data.frame(x),
+                                      paste0('DisGeNET/Enrichment_',module,'.txt'),
+                                           append = T, sep='\t', quote = F))
+}
+```
+
+```{r}
+print(modules_OI_AD, quote = F)
+```
+
+```{r}
+modules <- paste0("module", c(1:156))
+modules_OI_MDD <- c()
+for (module in modules){
+  modIds <- B_MDD[module]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  symbols <- modIds$GeneSymbol
+  enriched <- enrichr(symbols, dbs)
+  enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+  if (dim(as.data.frame(enriched[[1]]) %>% filter(grepl("depr", Term, ignore.case = T)))[1] != 0) {
+      modules_OI_MDD <- c(modules_OI_MDD, module)
+  }
+  lapply(enriched, function(x) write.table(data.frame(x),
+                                    paste0('DisGeNET/EnrichmentMDD_',module,'.txt'),
+                                           append = T, sep='\t', quote = F, col.names = T))
+}
+```
+
+```{r}
+print(modules_OI_MDD, quote = F)
+```
+
+# DisGeNET enrichment in target genes of TFs
+```{r}
+network_AD <- read.delim("./ensemble_netw_AD.txt")
+network_MDD <- read.delim("./ensemble_netw_MDD.txt") 
+network_AD <- network_AD %>% select(TF, Target_gene)
+network_MDD <- network_MDD %>% select(TF, Target_gene)
+B_AD <- network_AD %>% group_by(TF) %>% mutate(rid = row_number()) %>% spread(TF, Target_gene)
+B_AD <- B_AD %>% select(-rid)
+B_MDD <- network_MDD %>% group_by(TF) %>% mutate(rid = row_number()) %>% spread(TF, Target_gene)
+B_MDD <- B_MDD %>% select(-rid)
+```
+
+```{r}
+TFs_OI_AD_network <- c()
+for (regulator in colnames(B_AD)){
+  modIds <- B_AD[regulator]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  symbols <- modIds$GeneSymbol
+  enriched <- enrichr(symbols, dbs)
+  enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+  if (dim(as.data.frame(enriched[[1]]) %>% filter(grepl("Alz", Term, ignore.case = T)))[1] != 0) {
+      TFs_OI_AD_network <- c(TFs_OI_AD_network, regulator)
+}
+  lapply(enriched, function(x) write.table(data.frame(x),
+                                      paste0('DisGeNET_network/Enrichment_',regulator,'.txt'),
+                                           append = T, sep='\t', quote = F))
+}
+```
+
+```{r}
+print(TFs_OI_AD_network, quote = F) # CEBPD, FOS, FOSB, IRF8, MYC, NFATC2, TFEC
+```
+
+```{r}
+TFs_OI_MDD_network <- c()
+for (regulator in colnames(B_MDD)){
+  modIds <- B_MDD[regulator]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  symbols <- modIds$GeneSymbol
+  enriched <- enrichr(symbols, dbs)
+  enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+  if (dim(as.data.frame(enriched[[1]]) %>% filter(grepl("depr", Term, ignore.case = T)))[1] != 0) {
+      TFs_OI_MDD_network <- c(TFs_OI_MDD_network, regulator)
+}
+  lapply(enriched, function(x) write.table(data.frame(x),
+                                      paste0('DisGeNET_network/EnrichmentMDD_',regulator,'.txt'),
+                                           append = T, sep='\t', quote = F))
+}
+```
+
+```{r}
+print(TFs_OI_MDD_network, quote = F) # FOS, FOSB, JUNB, MAFF, RUNX1, STAT3
+```
+
+CREB1, ESR2, ESRRA are bipolar depression, so will not include this  
+KLF12, KLF13 have Involutional Depression, will also not include  
+KLF15, TP53 Depressed nasal ridge  
+FLI1, FOS only have depressive symptoms  
+MSX1 only has depressed mood  
+STAT3 only has Mixed anxiety and depressive disorder  
+ZIC1 only Depressive episode, unspecified  
+
+# DisGeNET enrichment in regulons 
+```{r}
+network_AD_sc <- read.table("single-cell/edgelist_sc_AD.txt", sep = "\t", header = T)
+network_MDD_sc <- read.table("single-cell/edgelist_sc_MDD.txt", sep = "\t", header = T)
+```
+
+```{r}
+B_sc <- network_AD_sc %>% group_by(regulator) %>% mutate(rid = row_number()) %>% spread(regulator, gene)
+B_sc <- B_sc %>% select(-rid, -value)
+B_sc_MDD <- network_MDD_sc %>% group_by(regulator) %>% mutate(rid = row_number()) %>% spread(regulator, gene)
+B_sc_MDD <- B_sc_MDD %>% select(-rid, -value)
+```
+
+```{r}
+regulons_OI_AD_sc <- c()
+for (regulator in colnames(B_sc)){
+  modIds <- B_sc[regulator]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  symbols <- modIds$GeneSymbol
+  enriched <- enrichr(symbols, dbs)
+  enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+  if (dim(as.data.frame(enriched[[1]]) %>% filter(grepl("Alz", Term, ignore.case = T)))[1] != 0) {
+      regulons_OI_AD_sc <- c(regulons_OI_AD_sc, regulator)
+}
+  lapply(enriched, function(x) write.table(data.frame(x),
+                                      paste0('single-cell/DisGeNET/Enrichment_',regulator,'.txt'),
+                                           append = T, sep='\t', quote = F))
+}
+```
+
+```{r}
+print(regulons_OI_AD_sc, quote = F) # FOS, IKZF1, IRF8, JUN, MAF, MAFF, NFATC2, RUNX1, SPI1, STAT3, TAL1
+```
+ESR1 only has Dementia due to Alzheimer's disease (disorder)	 
+MYC, ZBTB7B only ALZHEIMER DISEASE 5  
+
+```{r}
+regulons_OI_MDD_sc <- c()
+for (regulator in colnames(B_sc_MDD)){
+  modIds <- B_sc_MDD[regulator]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  symbols <- modIds$GeneSymbol
+  enriched <- enrichr(symbols, dbs)
+  enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+  if (dim(as.data.frame(enriched[[1]]) %>% filter(grepl("depr", Term, ignore.case = T)))[1] != 0) {
+      regulons_OI_MDD_sc <- c(regulons_OI_MDD_sc, regulator)
+}
+  lapply(enriched, function(x) write.table(data.frame(x),
+                                      paste0('single-cell/DisGeNET/EnrichmentMDD_',regulator,'.txt'),
+                                           append = T, sep='\t', quote = F))
+}
+```
+
+```{r}
+print(regulons_OI_MDD_sc, quote = F) # CEBPD, FOS, FOSB, IRF8, JUN, JUNB, PAX6, RUNX1
+```
+
+IRF1 only Mixed anxiety and depressive disorder  
+OVOL2, ZNF43 only Recurrent major depressive episodes  
+SOX4 only bipolar disorder
+USF2 endogenous depression, depressive syndrome
+ZSCAN5A only Recurrent depression
+

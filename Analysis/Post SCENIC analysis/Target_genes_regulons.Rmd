@@ -1,0 +1,620 @@
+---
+title: "Target genes of regulons single-cell"
+author: "Hanne Puype"
+date: "2023-02-08"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+    df_print: "paged"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Read in files 
+```{r}
+library(tidyverse)
+networkAD_sc <- read.table("edgelist_sc_AD.txt", sep = "\t", header = T)
+networkAD_sc <- networkAD_sc %>% select(regulator, gene, value)
+networkMDD_sc <-  read.table("edgelist_sc_MDD.txt", sep = "\t", header = T)
+networkMDD_sc <- networkMDD_sc %>% select(regulator, gene, value)
+modulesAD <- read.table("../kmed_modules_AD.txt",
+                        header = F, sep = "\t")
+modulesMDD <- read.table("../kmed_modules_MDD.txt",
+                         header = F, sep = "\t")
+```
+
+# Retrieve regulons
+```{r}
+reg_IRF8 <- networkAD_sc %>% filter(regulator == "IRF8")
+reg_NFATC2 <- networkAD_sc %>% filter(regulator == "NFATC2")
+reg_RUNX1 <- networkAD_sc %>% filter(regulator == "RUNX1")
+reg_IKZF1 <- networkAD_sc %>% filter(regulator == "IKZF1")
+reg_SPI1 <- networkAD_sc %>% filter(regulator == "SPI1")
+reg_TAL1 <- networkAD_sc %>% filter(regulator == "TAL1")
+reg_CEBPD <- network_AD_sc %>% filter(regulator == "CEBPD")
+reg_FOS <- network_AD_sc %>% filter(regulator == "FOS")
+reg_JUNB <- network_AD_sc %>% filter(regulator == "JUNB")
+reg_MAFF <- network_AD_sc %>% filter(regulator == "MAFF")
+reg_MYC <- network_AD_sc %>% filter(regulator == "MYC")
+reg_STAT3 <- network_AD_sc %>% filter(regulator == "STAT3")
+
+reg_IRF8_MDD <- networkMDD_sc %>% filter(regulator == "IRF8")
+reg_RUNX1_MDD <- networkMDD_sc %>% filter(regulator == "RUNX1")
+reg_IKZF1_MDD <- networkMDD_sc %>% filter(regulator == "IKZF1")
+reg_SPI1_MDD <- networkMDD_sc %>% filter(regulator == "SPI1")
+reg_TAL1_MDD <- networkMDD_sc %>% filter(regulator == "TAL1")
+reg_CEBPD_MDD <- networkMDD_sc %>% filter(regulator == "CEBPD")
+reg_FOS_MDD <- network_MDD_sc %>% filter(regulator == "FOS")
+reg_JUNB_MDD <- network_MDD_sc %>% filter(regulator == "JUNB")
+reg_STAT3_MDD <- network_MDD_sc %>% filter(regulator == "STAT3")
+```
+
+
+# Core network TFs 
+## AD
+```{r}
+reg_IRF8 %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | 
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+reg_NFATC2 %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | 
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+reg_RUNX1 %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | 
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+reg_IKZF1 %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | 
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+reg_SPI1 %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | 
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+reg_TAL1 %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | 
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+```
+
+## MDD
+```{r}
+reg_IRF8_MDD %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | 
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+reg_RUNX1_MDD %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | 
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+reg_IKZF1_MDD %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | 
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+reg_SPI1_MDD %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | 
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+reg_TAL1_MDD %>% filter(gene == "IKZF1" | gene == "IRF8" | gene == "NFATC2" | 
+                          gene == "RUNX1" | gene == "TAL1" | gene == "SPI1")
+```
+
+# Overlap regulons 
+```{r}
+jaccard <- function(a, b) {
+    intersection = length(intersect(a, b))
+    union = length(a) + length(b) - intersection
+    return (intersection/union)
+}
+
+jaccard(reg_IKZF1$gene, reg_IKZF1_MDD$gene) # AD 1520, MDD 227
+jaccard(reg_IRF8$gene, reg_IRF8_MDD$gene) # AD 938 MDD 142
+jaccard(reg_RUNX1$gene, reg_RUNX1_MDD$gene) # AD 1016 MDD 314 --> least overlap
+jaccard(reg_SPI1$gene, reg_SPI1_MDD$gene) # AD 1018 MDD 19 --> number small bcs of MDD, there are 18 genes in common
+jaccard(reg_TAL1$gene, reg_TAL1_MDD$gene) # AD 401 MDD 89
+```
+
+```{r}
+length(intersect(reg_IKZF1$gene, reg_IKZF1_MDD$gene)) # AD 1520, MDD 227
+length(intersect(reg_IRF8$gene, reg_IRF8_MDD$gene)) # AD 938 MDD 142
+length(intersect(reg_RUNX1$gene, reg_RUNX1_MDD$gene)) # AD 1016 MDD 314 --> least overlap
+length(intersect(reg_SPI1$gene, reg_SPI1_MDD$gene)) # AD 1018 MDD 19 --> number small bcs of MDD, there are 18 genes in common
+length(intersect(reg_TAL1$gene, reg_TAL1_MDD$gene)) # AD 401 MDD 89
+```
+
+The overlap between AD and MDD regulons is here quite good, with a number of genes close to the ones inferred in MDD  
+The regulon of RUNX1 is an exception here. 
+
+```{r}
+length(intersect(reg_STAT3$gene, reg_STAT3_MDD$gene)) # AD 679, MDD 23
+length(intersect(reg_CEBPD$gene, reg_CEBPD_MDD$gene)) # AD 217 MDD 93
+length(intersect(reg_FOS$gene, reg_FOS_MDD$gene)) # AD 374 MDD 191 
+length(intersect(reg_JUNB$gene, reg_JUNB_MDD$gene)) # AD 229 MDD 340 
+```
+Here the overlap is less compared to the regulons above 
+
+# Overlap regulons and modules 
+```{r}
+module24 <- modulesMDD %>% filter(V2 == 24)
+module22 <- modulesAD %>% filter(V2 == 22)
+module39 <- modulesAD %>% filter(V2 == 39)
+```
+
+Module 22 AD 
+```{r}
+#single-cell AD
+length(intersect(module22$V1, reg_IKZF1$gene)) # module 47 genes
+length(intersect(module22$V1, reg_NFATC2$gene)) # 65.2% overlap 
+length(intersect(module22$V1, reg_RUNX1$gene))
+length(intersect(module22$V1, reg_IRF8$gene))
+length(intersect(module22$V1, reg_SPI1$gene))
+length(intersect(module22$V1, reg_TAL1$gene))
+## single-cell MDD
+length(intersect(module22$V1, reg_IKZF1_MDD$gene)) # 29.8% overlap
+length(intersect(module22$V1, reg_RUNX1_MDD$gene))
+length(intersect(module22$V1, reg_IRF8_MDD$gene))
+length(intersect(module22$V1, reg_SPI1_MDD$gene))
+length(intersect(module22$V1, reg_TAL1_MDD$gene))
+```
+
+There is quite some overlap between module 22 and the single-cell regulons of AD, except for NFATC2 and TAL1
+There is less overlap with the MDD regulons, but here there were also less edges inferred 
+
+Module 24 MDD
+```{r}
+#single-cell AD
+length(intersect(module24$V1, reg_IKZF1$gene)) # module 54 genes
+length(intersect(module24$V1, reg_NFATC2$gene)) # 63.3% overlap 
+length(intersect(module24$V1, reg_RUNX1$gene))
+length(intersect(module24$V1, reg_IRF8$gene))
+length(intersect(module24$V1, reg_SPI1$gene))
+length(intersect(module24$V1, reg_TAL1$gene))
+## single-cell MDD
+length(intersect(module24$V1, reg_IKZF1_MDD$gene)) # 17.4% overlap
+length(intersect(module24$V1, reg_RUNX1_MDD$gene))
+length(intersect(module24$V1, reg_IRF8_MDD$gene))
+length(intersect(module24$V1, reg_SPI1_MDD$gene))
+length(intersect(module24$V1, reg_TAL1_MDD$gene))
+```
+Here again, the overlap is less for NFATC2 and TAL1 and larger for the AD single-cell regulons. Also less for SPI1 in MDD regulon.  
+
+Module 39 
+```{r}
+#single-cell AD
+length(intersect(module39$V1, reg_IKZF1$gene)) # module 103 genes
+length(intersect(module39$V1, reg_NFATC2$gene)) # 78.1% overlap 
+length(intersect(module39$V1, reg_RUNX1$gene))
+length(intersect(module39$V1, reg_IRF8$gene))
+length(intersect(module39$V1, reg_SPI1$gene))
+length(intersect(module39$V1, reg_TAL1$gene))
+## single-cell MDD
+length(intersect(module39$V1, reg_IKZF1_MDD$gene)) # 32.3% overlap
+length(intersect(module39$V1, reg_RUNX1_MDD$gene))
+length(intersect(module39$V1, reg_IRF8_MDD$gene))
+length(intersect(module39$V1, reg_SPI1_MDD$gene))
+```
+
+# Other modules and regulons
+```{r}
+reg_MEF2C <- networkAD_sc %>% filter(regulator == "MEF2C")
+reg_CEBPD <- networkAD_sc %>% filter(regulator == "CEBPD")
+reg_LEF1 <- networkAD_sc %>% filter(regulator == "LEF1") 
+reg_FOXO1 <- networkAD_sc %>% filter(regulator == "FOXO1")
+reg_SOX10 <- networkAD_sc %>% filter(regulator == "SOX10")
+reg_SOX8 <- networkAD_sc %>% filter(regulator == "SOX8")
+reg_STAT3 <- networkAD_sc %>% filter(regulator == "STAT3") 
+reg_PAX6 <- networkAD_sc %>% filter(regulator == "PAX6")
+reg_PPARA <- networkAD_sc %>% filter(regulator == "PPARA")
+reg_FOS <- networkAD_sc %>% filter(regulator == "FOS")
+reg_JUN <- networkAD_sc %>% filter(regulator == "JUN")
+reg_JUNB <- networkAD_sc %>% filter(regulator == "JUNB")
+reg_KLF4 <- networkAD_sc %>% filter(regulator == "KLF4")
+reg_ATF3 <- networkAD_sc %>% filter(regulator == "ATF3")
+reg_RBPJ <- networkAD_sc %>% filter(regulator == "RBPJ")
+reg_ZNF536 <- networkAD_sc %>% filter(regulator == "ZNF536")
+reg_KLF6 <- network_AD_sc %>% filter(regulator == "KLF6")
+reg_FOSL2 <- network_AD_sc %>% filter(regulator == "FOSL2")
+```
+
+```{r}
+reg_CEBPD_MDD <- networkMDD_sc %>% filter(regulator == "CEBPD")
+reg_LEF1_MDD <- networkMDD_sc %>% filter(regulator == "LEF1") 
+reg_FOXO1_MDD <- networkMDD_sc %>% filter(regulator == "FOXO1")
+reg_SOX9_MDD <- networkMDD_sc %>% filter(regulator == "SOX9")
+reg_SOX10_MDD <- networkMDD_sc %>% filter(regulator == "SOX10")
+reg_SOX8_MDD <- networkMDD_sc %>% filter(regulator == "SOX8")
+reg_STAT3_MDD <- networkMDD_sc %>% filter(regulator == "STAT3") 
+reg_PAX6_MDD <- networkMDD_sc %>% filter(regulator == "PAX6")
+reg_SOX21_MDD <- networkMDD_sc %>% filter(regulator == "SOX21")
+reg_PPARA_MDD <- networkMDD_sc %>% filter(regulator == "PPARA")
+reg_FOS_MDD <- networkMDD_sc %>% filter(regulator == "FOS")
+reg_JUN_MDD <- networkMDD_sc %>% filter(regulator == "JUN")
+reg_JUNB_MDD <- networkMDD_sc %>% filter(regulator == "JUNB")
+reg_KLF4_MDD <- networkMDD_sc %>% filter(regulator == "KLF4")
+reg_ATF3_MDD <- networkMDD_sc %>% filter(regulator == "ATF3")
+reg_NFIB_MDD <- networkMDD_sc %>% filter(regulator == "NFIB")
+reg_BBX_MDD <- networkMDD_sc %>% filter(regulator == "BBX")
+```
+
+Module 26 AD
+```{r}
+Module26 <- modulesAD %>% filter(V2 == 26) # 52 genes
+length(intersect(Module26$V1, reg_MEF2C$gene))
+genes_MEFC2 <- reg_MEF2C$gene
+library(enrichR)
+dbs <- c("GO_Biological_Process_2021", "KEGG_2021_Human", 
+         "Reactome_2016", "WikiPathway_2021_Human")
+enriched <- enrichr(genes_MEFC2, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_MEFC2_AD.txt',
+                                           append = T, sep='\t', quote = F))
+```
+
+Module 35 AD
+```{r}
+module35 <- modulesAD %>% filter(V2 == 35) # 66 genes
+length(intersect(module35$V1, reg_BBX_MDD$gene))
+length(intersect(module35$V1, reg_SOX10$gene))
+length(intersect(module35$V1, reg_SOX10_MDD$gene)) # 1/3 overlap
+length(intersect(module35$V1, reg_SOX8$gene))
+length(intersect(module35$V1, reg_SOX8_MDD$gene)) # 1/3 overlap
+length(intersect(module35$V1, reg_RBPJ$gene))
+length(intersect(module35$V1, reg_ZNF536$gene))
+```
+
+```{r}
+genes_BBX_MDD <- reg_BBX_MDD$gene
+enriched <- enrichr(genes_BBX_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_BBX_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_SOX10 <- reg_SOX10$gene
+enriched <- enrichr(genes_SOX10, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_SOX10_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_SOX10_MDD <- reg_SOX10_MDD$gene
+enriched <- enrichr(genes_SOX10_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_SOX10_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_SOX8 <- reg_SOX8$gene
+enriched <- enrichr(genes_SOX8, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_SOX8_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_SOX8_MDD <- reg_SOX8_MDD$gene
+enriched <- enrichr(genes_SOX8_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_SOX8_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_RBPJ <- reg_RBPJ$gene
+enriched <- enrichr(genes_RBPJ, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_RBPJ_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_ZNF536 <- reg_ZNF536$gene
+enriched <- enrichr(genes_ZNF536, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_ZNF536_AD.txt',
+                                           append = T, sep='\t', quote = F))
+```
+
+Module 51 AD 
+```{r}
+module51 <- modulesAD %>% filter(V2 == 51) # 35 genes
+length(intersect(module51$V1, reg_KLF6$gene))
+length(intersect(module51$V1, reg_FOSL2$gene))
+```
+
+Module 86 AD
+```{r}
+module86 <- modulesAD %>% filter(V2 == 86) # 75 genes
+length(intersect(module86$V1, reg_JUNB$gene))
+length(intersect(module86$V1, reg_FOS$gene))
+length(intersect(module86$V1, reg_MYC$gene))
+length(intersect(module86$V1, reg_MAFF$gene))
+length(intersect(module86$V1, reg_CEBPD$gene))
+length(intersect(module86$V1, reg_STAT3$gene))
+
+```
+
+
+Module 153 AD
+```{r}
+module153 <- modulesAD %>% filter(V2 == 153) # 19 genes 
+length(intersect(module153$V1, reg_CEBPD$gene)) # 21.1% overlap
+length(intersect(module153$V1, reg_CEBPD_MDD$gene))
+length(intersect(module153$V1, reg_LEF1$gene))
+length(intersect(module153$V1, reg_LEF1_MDD$gene))
+length(intersect(module153$V1, reg_MAFF$gene))
+```
+
+```{r}
+genes_CEBPD <- reg_CEBPD$gene
+enriched <- enrichr(genes_CEBPD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_CEBPD_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_CEBPD_MDD <- reg_CEBPD_MDD$gene
+enriched <- enrichr(genes_CEBPD_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_CEBPD_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_LEF1 <- reg_LEF1$gene
+enriched <- enrichr(genes_LEF1, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_LEF1_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_LEF1_MDD <- reg_LEF1_MDD$gene
+enriched <- enrichr(genes_LEF1_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_LEF1_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+```
+
+Module 36 MDD
+```{r}
+module36 <- modulesMDD %>% filter(V2 == 36) # 35 genes
+length(intersect(module36$V1, reg_FOXO1$gene)) # 1/6 overlap
+length(intersect(module36$V1, reg_FOXO1_MDD$gene))
+length(intersect(module36$V1, reg_SOX9_MDD$gene))
+length(intersect(module36$V1, reg_STAT3$gene)) # 74.3% overlap
+length(intersect(module36$V1, reg_STAT3_MDD$gene))
+```
+
+```{r}
+genes_FOXO1 <- reg_FOXO1$gene
+enriched <- enrichr(genes_FOXO1, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_FOXO1_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_FOXO1_MDD <- reg_FOXO1_MDD$gene
+enriched <- enrichr(genes_FOXO1_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_FOXO1_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_STAT3 <- reg_STAT3$gene
+enriched <- enrichr(genes_STAT3, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_STAT3_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_STAT3_MDD <- reg_STAT3_MDD$gene
+enriched <- enrichr(genes_STAT3_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_STAT3_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_SOX9_MDD <- reg_SOX9_MDD$gene
+enriched <- enrichr(genes_SOX9_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_SOX9_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+```
+
+Module 44 MDD
+```{r}
+module44 <- modulesMDD %>% filter(V2 == 44) # 55 genes
+length(intersect(module44$V1, reg_PAX6$gene))
+length(intersect(module44$V1, reg_PAX6_MDD$gene))
+length(intersect(module44$V1, reg_SOX9_MDD$gene)) # most overlap, also larger regulon
+length(intersect(module44$V1, reg_SOX21_MDD$gene))
+length(intersect(module44$V1, reg_PPARA$gene))
+length(intersect(module44$V1, reg_PPARA_MDD$gene))
+```
+
+```{r}
+genes_PAX6 <- reg_PAX6$gene
+enriched <- enrichr(genes_PAX6, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_PAX6_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_PAX6_MDD <- reg_PAX6_MDD$gene
+enriched <- enrichr(genes_PAX6_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_PAX6_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_PPARA <- reg_PPARA$gene
+enriched <- enrichr(genes_PPARA, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_PPARA_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_PPARA_MDD <- reg_PPARA_MDD$gene
+enriched <- enrichr(genes_PPARA_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_PPARA_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_SOX21_MDD <- reg_SOX21_MDD$gene
+enriched <- enrichr(genes_SOX21_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_SOX21_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+```
+
+Module 56 MDD
+```{r}
+module56 <- modulesMDD %>% filter(V2 == 56) # 94 genes
+length(intersect(module56$V1, reg_CEBPD_MDD$gene))
+length(intersect(module56$V1, reg_STAT3_MDD$gene))
+```
+
+Module 93 MDD
+```{r}
+module93 <- modulesMDD %>% filter(V2 == 93) # 29 genes
+length(intersect(module93$V1, reg_PAX6$gene))
+length(intersect(module93$V1, reg_PAX6_MDD$gene)) # 19 in regulon
+length(intersect(module93$V1, reg_PPARA$gene))
+length(intersect(module93$V1, reg_PPARA_MDD$gene)) # 48 in regulon
+length(intersect(module93$V1, reg_SOX21_MDD$gene))
+```
+
+Module 110 MDD
+```{r}
+module110 <- modulesMDD %>% filter(V2 == 110) # 48 genes
+length(intersect(module110$V1, reg_FOS$gene))
+length(intersect(module110$V1, reg_FOS_MDD$gene))
+length(intersect(module110$V1, reg_JUN$gene))
+length(intersect(module110$V1, reg_JUN_MDD$gene))
+length(intersect(module110$V1, reg_JUNB$gene))
+length(intersect(module110$V1, reg_JUNB_MDD$gene))
+length(intersect(module110$V1, reg_KLF4$gene)) # 7 in regulon
+length(intersect(module110$V1, reg_KLF4_MDD$gene))
+length(intersect(module110$V1, reg_ATF3$gene)) 
+length(intersect(module110$V1, reg_ATF3_MDD$gene))
+length(intersect(module110$V1, reg__MDD$gene))
+```
+Here there is a larger overlap compared with the previous ones. Could also be because of larger regulons  
+
+```{r}
+genes_FOS <- reg_FOS$gene
+enriched <- enrichr(genes_FOS, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_FOS_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_FOS_MDD <- reg_FOS_MDD$gene
+enriched <- enrichr(genes_FOS_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_FOS_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_JUN <- reg_JUN$gene
+enriched <- enrichr(genes_JUN, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_JUN_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_JUN_MDD <- reg_JUN_MDD$gene
+enriched <- enrichr(genes_JUN_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_JUN_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_JUNB <- reg_JUNB$gene
+enriched <- enrichr(genes_JUNB, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_JUNB_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_JUNB_MDD <- reg_JUNB_MDD$gene
+enriched <- enrichr(genes_JUNB_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_JUNB_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_KLF4 <- reg_KLF4$gene
+enriched <- enrichr(genes_KLF4, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_KLF4_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_KLF4_MDD <- reg_KLF4_MDD$gene
+enriched <- enrichr(genes_KLF4_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_KLF4_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_ATF3 <- reg_ATF3$gene
+enriched <- enrichr(genes_ATF3, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_ATF3_AD.txt',
+                                           append = T, sep='\t', quote = F))
+genes_ATF3_MDD <- reg_ATF3_MDD$gene
+enriched <- enrichr(genes_ATF3_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_ATF3_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+```
+
+Module 115 MDD
+```{r}
+module115 <- modulesMDD %>% filter(V2 == 115) # 38 genes
+length(intersect(module115$V2, reg_FOXO1$gene))
+length(intersect(module115$V2, reg_FOXO1_MDD$gene))
+length(intersect(module115$V2, reg_STAT3$gene))
+length(intersect(module115$V2, reg_STAT3_MDD$gene))
+length(intersect(module115$V2, reg_NFIB_MDD$gene))
+genes_NFIB_MDD <- reg_NFIB_MDD$gene
+enriched <- enrichr(genes_NFIB_MDD, dbs)
+enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+lapply(enriched, function(x) write.table(data.frame(x),
+                                         'FunctionalEnrich/FunctEnrich_NFIB_MDD.txt',
+                                           append = T, sep='\t', quote = F))
+```
+
+# Overlap regulons AD and MDD 
+```{r}
+reg_HLF <- networkAD_sc %>% filter(regulator == "HLF") # 432 genes
+reg_HLF_MDD <- networkMDD_sc %>% filter(regulator == "HLF") # 342 genes
+length(intersect(reg_HLF$gene, reg_HLF_MDD$gene))
+reg_ZEB1 <- networkAD_sc %>% filter(regulator == "ZEB1") # 1204 genes
+reg_ZEB1_MDD <- networkMDD_sc %>% filter(regulator == "ZEB1") # 102 genes
+length(intersect(reg_ZEB1$gene, reg_ZEB1_MDD$gene))
+reg_ZMAT4 <- networkAD_sc %>% filter(regulator == "ZMAT4") # 26 genes
+reg_ZMAT4_MDD <- networkMDD_sc %>% filter(regulator == "ZMAT4") # 422 genes
+length(intersect(reg_ZMAT4$gene, reg_ZMAT4_MDD$gene))
+reg_RFX3 <- networkAD_sc %>% filter(regulator == "RFX3") # 545 genes
+reg_RFX3_MDD <- networkMDD_sc %>% filter(regulator == "RFX3") # 576 genes
+length(intersect(reg_RFX3$gene, reg_RFX3_MDD$gene))
+reg_DLX1 <- networkAD_sc %>% filter(regulator == "DLX1") # 176 genes
+reg_DLX1_MDD <- networkMDD_sc %>% filter(regulator == "DLX1") # 318 genes
+length(intersect(reg_DLX1$gene, reg_DLX1_MDD$gene))
+reg_DLX5 <- networkAD_sc %>% filter(regulator == "DLX5") # 103 genes
+reg_DLX5_MDD <- networkMDD_sc %>% filter(regulator == "DLX5") # 79 genes
+length(intersect(reg_DLX5$gene, reg_DLX5_MDD$gene))
+reg_LHX6 <- networkAD_sc %>% filter(regulator == "LHX6") # 165 genes
+reg_LHX6_MDD <- networkMDD_sc %>% filter(regulator == "LHX6") # 339 genes
+length(intersect(reg_LHX6$gene, reg_LHX6_MDD$gene))
+reg_TCF4 <- networkAD_sc %>% filter(regulator == "TCF4") # 43 genes
+reg_TCF4_MDD <- networkMDD_sc %>% filter(regulator == "TCF4") # 12 genes
+length(intersect(reg_TCF4$gene, reg_TCF4_MDD$gene))
+reg_ELF1 <- networkAD_sc %>% filter(regulator == "ELF1") # 551 genes
+reg_ELF1_MDD <- networkMDD_sc %>% filter(regulator == "ELF1") # 94 genes
+length(intersect(reg_ELF1$gene, reg_ELF1_MDD$gene))
+reg_ETV6 <- networkAD_sc %>% filter(regulator == "ETV6") # 1826 genes
+reg_ETV6_MDD <- networkMDD_sc %>% filter(regulator == "ETV6") # 70 genes
+length(intersect(reg_ETV6$gene, reg_ETV6_MDD$gene))
+reg_FLI1 <- networkAD_sc %>% filter(regulator == "FLI1") # 1694 genes
+reg_FLI1_MDD <- networkMDD_sc %>% filter(regulator == "FLI1") # 386 genes
+length(intersect(reg_FLI1$gene, reg_FLI1_MDD$gene))
+length(intersect(reg_IKZF1$gene, reg_IKZF1_MDD$gene))
+length(intersect(reg_IRF8$gene, reg_IRF8_MDD$gene))
+reg_FOXN3 <- networkAD_sc %>% filter(regulator == "FOXN3") # 38 genes
+reg_FOXN3_MDD <- networkMDD_sc %>% filter(regulator == "FOXN3") # 235 genes
+length(intersect(reg_FOXN3$gene, reg_FOXN3_MDD$gene))
+length(intersect(reg_RUNX1$gene, reg_RUNX1_MDD$gene))
+length(intersect(reg_SPI1$gene, reg_SPI1_MDD$gene))
+reg_PRRX1 <- networkAD_sc %>% filter(regulator == "PRRX1") # 114 genes
+reg_PRRX1_MDD <- networkMDD_sc %>% filter(regulator == "PRRX1") # 189 genes
+length(intersect(reg_PRRX1$gene, reg_PRRX1_MDD$gene))
+reg_ZEB1 <- networkAD_sc %>% filter(regulator == "ZEB1") # 1204 genes
+reg_ZEB1_MDD <- networkMDD_sc %>% filter(regulator == "ZEB1") # 102 genes
+length(intersect(reg_ZEB1$gene, reg_ZEB1_MDD$gene))
+reg_VSX1 <- networkAD_sc %>% filter(regulator == "VSX1") # 91 genes
+reg_VSX1_MDD <- networkMDD_sc %>% filter(regulator == "VSX1") # 16 genes
+length(intersect(reg_VSX1$gene, reg_VSX1_MDD$gene))
+reg_PBX3 <- networkAD_sc %>% filter(regulator == "PBX3") # 131 genes
+reg_PBX3_MDD <- networkMDD_sc %>% filter(regulator == "PBX3") # 38 genes
+length(intersect(reg_PBX3$gene, reg_PBX3_MDD$gene))
+reg_PBX3 <- networkAD_sc %>% filter(regulator == "PBX3") # 131 genes
+length(intersect(reg_FOXO1$gene, reg_FOXO1_MDD$gene))
+reg_RFX2 <- networkAD_sc %>% filter(regulator == "RFX2") # 716 genes
+reg_RFX2_MDD <- networkMDD_sc %>% filter(regulator == "RFX2") # 48 genes
+length(intersect(reg_RFX2$gene, reg_RFX2_MDD$gene))
+length(intersect(reg_PAX6$gene, reg_PAX6_MDD$gene))
+reg_TCF7L1 <- networkAD_sc %>% filter(regulator == "TCF7L1") # 821 genes
+reg_TCF7L1_MDD <- networkMDD_sc %>% filter(regulator == "TCF7L1") # 57 genes
+length(intersect(reg_TCF7L1$gene, reg_TCF7L1_MDD$gene))
+reg_TCF7L2 <- networkAD_sc %>% filter(regulator == "TCF7L2") # 286 genes
+reg_TCF7L2_MDD <- networkMDD_sc %>% filter(regulator == "TCF7L2") # 377 genes
+length(intersect(reg_TCF7L2$gene, reg_TCF7L2_MDD$gene))
+```
+

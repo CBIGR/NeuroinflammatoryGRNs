@@ -1,0 +1,101 @@
+---
+title: "UniBind"
+author: "Hanne Puype"
+date: "2023-07-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Read in files
+```{r}
+library(tidyverse)
+closest_UniBind_TSS <- read.table("closest_UniBind_TSS_ndup.bed")
+dim(closest_UniBind_TSS)
+colnames(closest_UniBind_TSS) <- c("TF", "Gene", "Distance")
+closest_UniBind_TSS %>% group_by(TF) %>% summarise(n())
+closest_UniBind_TSS_f <- closest_UniBind_TSS %>% filter(Distance < 10000)
+dbTF <- read.csv("../dbTF.csv", sep="")
+closest_UniBind_TSS_f <- closest_UniBind_TSS_f %>% filter(TF %in% dbTF$Gene_symbol)
+dim(closest_UniBind_TSS_f)
+length(unique(closest_UniBind_TSS_f$TF))
+length(unique(closest_UniBind_TSS_f$Gene))
+```
+
+```{r}
+network_AD <- read.delim("../ensemble_netw_AD.txt")
+network_MDD <- read.delim("../ensemble_netw_MDD.txt")
+single_cell_AD <- read.delim("../Single-cell/edgelist_sc_AD.txt")
+single_cell_MDD <- read.delim("../Single-cell/edgelist_sc_MDD.txt")
+```
+
+# Filter for TFs and genes in UniBind and in networks
+```{r}
+UniBind_AD_bulk <- closest_UniBind_TSS_f %>% filter(TF %in% network_AD$TF) %>% filter(Gene %in% network_AD$Target_gene)
+UniBind_MDD_bulk <- closest_UniBind_TSS_f %>% filter(TF %in% network_MDD$TF) %>% filter(Gene %in% network_MDD$Target_gene)
+UniBind_AD_sc <- closest_UniBind_TSS_f %>% filter(TF %in% single_cell_AD$regulator) %>% filter(Gene %in% single_cell_AD$gene)
+UniBind_MDD_sc <- closest_UniBind_TSS_f %>% filter(TF %in% single_cell_MDD$regulator) %>% filter(Gene %in% single_cell_MDD$gene)
+```
+
+```{r}
+network_AD_f <- network_AD %>% filter(TF %in% UniBind_AD_bulk$TF) %>% filter(Target_gene %in% UniBind_AD_bulk$Gene)
+network_MDD_f <- network_MDD %>% filter(TF %in% UniBind_MDD_bulk$TF) %>% filter(Target_gene %in% UniBind_MDD_bulk$Gene)
+single_cell_AD_f <- single_cell_AD %>% filter(regulator %in% UniBind_AD_sc$TF) %>% filter(gene %in% UniBind_AD_sc$Gene)
+single_cell_MDD_f <- single_cell_MDD %>% filter(regulator %in% UniBind_MDD_sc$TF) %>% filter(gene %in% UniBind_MDD_sc$Gene)
+```
+
+# Precision and recall calculation
+```{r}
+UniBind_AD_bulk$concat <- paste(UniBind_AD_bulk$TF, UniBind_AD_bulk$Gene, sep = ":")
+network_AD_f$concat <- paste(network_AD_f$TF, network_AD_f$Target_gene, sep = ":")
+
+true_pos <- length(intersect(UniBind_AD_bulk$concat, network_AD_f$concat))
+precision_AD <- true_pos / dim(network_AD_f)[1]
+recall_AD <- true_pos / dim(UniBind_AD_bulk)[1]
+print(c("Precision of bulk AD network:", precision_AD), quote = F)
+print(c("Recall of bulk AD network:", recall_AD), quote = F)
+```
+
+```{r}
+UniBind_MDD_bulk$concat <- paste(UniBind_MDD_bulk$TF, UniBind_MDD_bulk$Gene, sep = ":")
+network_MDD_f$concat <- paste(network_MDD_f$TF, network_MDD_f$Target_gene, sep = ":")
+
+true_pos <- length(intersect(UniBind_MDD_bulk$concat, network_MDD_f$concat))
+precision_MDD <- true_pos / dim(network_MDD_f)[1]
+recall_MDD <- true_pos / dim(UniBind_MDD_bulk)[1]
+print(c("Precision of bulk MDD network:", precision_MDD), quote = F)
+print(c("Recall of bulk MDD network:", recall_MDD), quote = F)
+```
+
+```{r}
+UniBind_AD_sc$concat <- paste(UniBind_AD_sc$TF, UniBind_AD_sc$Gene, sep = ":")
+single_cell_AD_f$concat <- paste(single_cell_AD_f$regulator, single_cell_AD_f$gene, sep = ":")
+
+true_pos <- length(intersect(UniBind_AD_sc$concat, single_cell_AD_f$concat))
+precision_scAD <- true_pos / dim(single_cell_AD_f)[1]
+recall_scAD <- true_pos / dim(UniBind_AD_sc)[1]
+print(c("Precision of single-cell AD network:", precision_scAD), quote = F)
+print(c("Recall of single-cell AD network:", recall_scAD), quote = F)
+```
+
+```{r}
+UniBind_MDD_sc$concat <- paste(UniBind_MDD_sc$TF, UniBind_MDD_sc$Gene, sep = ":")
+single_cell_MDD_f$concat <- paste(single_cell_MDD_f$regulator, single_cell_MDD_f$gene, sep = ":")
+
+true_pos <- length(intersect(UniBind_MDD_sc$concat, single_cell_MDD_f$concat))
+precision_scMDD <- true_pos / dim(single_cell_MDD_f)[1]
+recall_scMDD <- true_pos / dim(UniBind_MDD_sc)[1]
+print(c("Precision of single-cell MDD network:", precision_scMDD), quote = F)
+print(c("Recall of single-cell MDD network:", recall_scMDD), quote = F)
+```
+
+# Save all in df
+```{r}
+PR_combined <- as.data.frame(c(precision_AD, precision_MDD, precision_scAD, precision_scMDD, recall_AD, recall_MDD, recall_scAD, recall_scMDD))
+names(PR_combined) <- "PR"
+rownames(PR_combined) <- c("precision_AD", "precision_MDD", "precision_scAD", "precision_scMDD", "recall_AD", "recall_MDD", "recall_scAD", "recall_scMDD")
+write.table(PR_combined, file = "PR_all_UniBind.txt", quote = F, row.names = T, col.names = T, sep = "\t")
+```
+

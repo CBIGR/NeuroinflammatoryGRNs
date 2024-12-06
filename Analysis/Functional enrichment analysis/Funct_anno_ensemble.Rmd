@@ -1,0 +1,692 @@
+---
+title: "Functional annotation ensemble networks"
+author: "Hanne Puype"
+date: '2022-04-23'
+output:  
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(enrichR)
+library(tidyverse)
+```
+
+# Modules
+
+```{r}
+modulesAD <- read.table("kmed_modules_AD.txt", header = F, sep = "\t")
+modulesMDD <- read.table("kmed_modules_MDD.txt", header = F, sep = "\t")
+colnames(modulesAD) <- c("Gene", "Module")
+colnames(modulesMDD) <- c("Gene", "Module")
+modulesAD <- as_tibble(modulesAD)
+modulesMDD <- as_tibble(modulesMDD)
+
+B <- modulesAD %>% group_by(Module) %>% mutate(rid = row_number()) %>% spread(Module, Gene)
+for (i in 2:length(names(B))){
+  names(B)[i] <- paste0('module', names(B)[i])
+}
+B_MDD <- modulesMDD %>% group_by(Module) %>% mutate(rid = row_number()) %>% spread(Module, Gene)
+for (i in 2:length(names(B_MDD))){
+  names(B_MDD)[i] <- paste0('module', names(B_MDD)[i])
+}
+```
+
+# Functional annotation
+
+<https://maayanlab.cloud/Enrichr/#libraries>
+
+```{r}
+dbs <- c("GO_Biological_Process_2021", "GO_Molecular_Function_2021", "KEGG_2021_Human", 
+         "Reactome_2016", "WikiPathway_2021_Human")
+```
+
+AD
+
+```{r eval=FALSE}
+modules <- paste0("module", c(1:155))
+for (module in modules){
+  modGenes <- (modules == module)
+  modIds <- B[module]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  symbols <- modIds$GeneSymbol
+  enriched <- enrichr(symbols, dbs)
+  enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+  lapply(enriched, function(x) write.table(data.frame(x),
+                                      paste0('FunctionalEnrich_ens/FunctionalEnrichment_',module,'.txt'),
+                                           append = T, sep='\t', quote = F))
+}
+```
+
+MDD
+
+```{r eval=FALSE}
+modules <- paste0("module", c(1:156))
+for (module in modules){
+  modGenes <- (modules == module)
+  modIds <- B_MDD[module]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  symbols <- modIds$GeneSymbol
+  enriched <- enrichr(symbols, dbs)
+  enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+  lapply(enriched, function(x) write.table(data.frame(x),
+                                    paste0('FunctionalEnrich_ens/FunctionalEnrichmentMDD_',module,'.txt'),
+                                           append = T, sep='\t', quote = F, col.names = T))
+}
+```
+
+## Module 22 from Alzheimer's disease
+
+```{r fig.width=15}
+module22 <- B$module22
+module22 <- module22[!is.na(module22)]
+length(module22)
+enriched_22AD <- enrichr(module22, dbs)
+enriched_22AD <- lapply(enriched_22AD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+enriched_22AD[["GO_Biological_Process_2021"]][["Term"]] <- gsub("\\(.*","", enriched_22AD[["GO_Biological_Process_2021"]][["Term"]])
+enriched_22AD[["GO_Biological_Process_2021"]][10, 1] <- "regulation T cell activation via T cell receptor contact with antigen bound to MHC molecule on APC"
+enriched_22AD[[4]][10, 1] <- "Immunoregulatory interactions between Lymphoid and non-Lymphoid cell"
+plotEnrich(enriched_22AD[[1]], showTerms = 20, numChar = 140, y = "Count", orderBy = "P.value", 
+           title = "GO Biological Process module 22 \n of AD network") + theme(text=element_text(size=20))
+ggsave("GO_BP_22.png", height = 8, width = 16)
+plotEnrich(enriched_22AD[[2]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", 
+           title = "GO Molecular Function module 22 of AD network") + theme(text=element_text(size=20))
+ggsave("GO_MF_22.png", height = 7, width = 15)
+plotEnrich(enriched_22AD[[3]], showTerms = 20, numChar = 50, y = "Count", orderBy = "P.value", 
+           title = "KEGG module 22 of AD network") + theme(text=element_text(size=20))
+ggsave("KEGG_22.png", height = 9, width = 20)
+enriched_22AD[[4]][["Term"]] <- gsub(" Homo.*", "", enriched_22AD[[4]][["Term"]])
+plotEnrich(enriched_22AD[[4]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "Reactome module 22 of AD network") + theme(text=element_text(size=20))
+ggsave("Reactome_22.png", height = 7, width = 14)
+enriched_22AD[[5]][["Term"]] <- gsub(" WP.*", "", enriched_22AD[[5]][["Term"]])
+plotEnrich(enriched_22AD[[5]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", 
+           title = "WikiPathways module 22 \n of AD network") + theme(text=element_text(size=20))
+ggsave("WP_22.png", height = 5, width = 10)
+```
+
+## Module 39 from AD
+
+```{r fig.width=10}
+module39 <- B$module39
+module39 <- module39[!is.na(module39)]
+length(module39)
+enriched_39AD <- enrichr(module39, dbs)
+enriched_39AD <- lapply(enriched_39AD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+plotEnrich(enriched_39AD[[1]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "FEA GO Biological Process module39 of AD")
+plotEnrich(enriched_39AD[[2]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", 
+           title = "FEA GO Molecular Function module39 of AD")
+plotEnrich(enriched_39AD[[3]], showTerms = 20, numChar = 50, y = "Count", orderBy = "P.value", 
+           title = "FEA KEGG module39 of AD")
+plotEnrich(enriched_39AD[[4]], showTerms = 20, numChar = 75, y = "Count", orderBy = "P.value", 
+           title = "FEA Reactome module39 of AD")
+plotEnrich(enriched_39AD[[5]], showTerms = 20, numChar = 70, y = "Count", orderBy = "P.value", 
+           title = "FEA WikiPathways module39 of AD")
+```
+
+## Module 35 from AD
+
+```{r fig.width=10}
+module35 <- B$module35
+module35 <- module35[!is.na(module35)]
+length(module35)
+enriched_35AD <- enrichr(module35, dbs)
+enriched_35AD <- lapply(enriched_35AD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+enriched_35AD[["GO_Biological_Process_2021"]][["Term"]] <- gsub("\\(.*","",
+                                                            enriched_35AD[["GO_Biological_Process_2021"]][["Term"]])
+plotEnrich(enriched_35AD[[1]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "GO Biological Process module 35 of AD network")
+ggsave("GO_BP_35.png", height = 7, width = 15)
+enriched_35AD[["GO_Molecular_Function_2021"]][["Term"]] <- gsub("\\(.*","",
+                                                            enriched_35AD[["GO_Molecular_Function_2021"]][["Term"]])
+plotEnrich(enriched_35AD[[2]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", 
+           title = "GO Molecular Function module 35 of AD network")
+ggsave("GO_MF_35.png", height = 7, width = 15)
+
+enriched_35AD[[5]][["Term"]] <- gsub(" WP.*", "", enriched_35AD[[5]][["Term"]])
+plotEnrich(enriched_35AD[[5]], showTerms = 20, numChar = 75, y = "Count", orderBy = "P.value", 
+           title = "WikiPathways module 35 of AD network")
+ggsave("WP_35.png", height = 7, width = 15)
+```
+
+## Module 60 from AD
+
+```{r fig.width=10}
+module60 <- B$module60
+module60 <- module60[!is.na(module60)]
+length(module60)
+enriched_60AD <- enrichr(module60, dbs)
+enriched_60AD <- lapply(enriched_60AD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+enriched_60AD[["GO_Biological_Process_2021"]][["Term"]] <- gsub("\\(.*","",
+                                                            enriched_60AD[["GO_Biological_Process_2021"]][["Term"]])
+plotEnrich(enriched_60AD[[1]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "GO Biological Process module 60 \n of AD network") + theme(text=element_text(size=20))
+ggsave("GO_BP_60.png", height = 7, width = 15)
+
+plotEnrich(enriched_60AD[[3]], showTerms = 20, numChar = 50, y = "Count", orderBy = "P.value", 
+           title = "KEGG module 60 of AD") + theme(text=element_text(size=20))
+ggsave("KEGG_60.png", height = 7, width = 15)
+
+enriched_60AD[[4]][["Term"]] <- gsub(" Homo.*", "", enriched_60AD[[4]][["Term"]])
+plotEnrich(enriched_60AD[[4]], showTerms = 20, numChar = 75, y = "Count", orderBy = "P.value", 
+           title = "Reactome module 60 of AD network") + theme(text=element_text(size=20))
+ggsave("Reactome_60.png", height = 7, width = 15)
+
+enriched_60AD[[5]][["Term"]] <- gsub(" WP.*", "", enriched_60AD[[5]][["Term"]])
+plotEnrich(enriched_60AD[[5]], showTerms = 20, numChar = 70, y = "Count", orderBy = "P.value", 
+           title = "WikiPathways module 60 of AD network") + theme(text=element_text(size=20))
+ggsave("WP_60.png", height = 7, width = 15)
+```
+
+## Module 66 from AD
+
+```{r fig.width=15}
+module66 <- B$module66
+module66 <- module66[!is.na(module66)]
+length(module66)
+enriched_66AD <- enrichr(module66, dbs)
+enriched_66AD <- lapply(enriched_66AD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+enriched_66AD[["GO_Molecular_Function_2021"]][["Term"]] <- gsub("\\(.*","", enriched_66AD[["GO_Molecular_Function_2021"]][["Term"]])
+
+plotEnrich(enriched_66AD[[2]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "GO Molecular Function module 66 of AD network") + theme(text=element_text(size=20))
+ggsave("GO_MF_66.png", height = 7, width = 15)
+plotEnrich(enriched_66AD[[3]], showTerms = 20, numChar = 50, y = "Count", orderBy = "P.value", 
+           title = "KEGG module 66 of AD network") + theme(text=element_text(size=20))
+ggsave("KEGG_66.png", height = 9, width = 20)
+enriched_66AD[[4]][["Term"]] <- gsub(" Homo.*", "", enriched_66AD[[4]][["Term"]])
+plotEnrich(enriched_66AD[[4]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "Reactome module 66 of AD network") + theme(text=element_text(size=20))
+ggsave("Reactome_66.png", height = 7, width = 14)
+enriched_66AD[[5]][["Term"]] <- gsub(" WP.*", "", enriched_66AD[[5]][["Term"]])
+plotEnrich(enriched_66AD[[5]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", 
+           title = "WikiPathways module 66 \n of AD network") + theme(text=element_text(size=20))
+ggsave("WP_66.png", height = 5, width = 10)
+```
+
+## Module 153 from AD
+
+```{r fig.width=10}
+module153 <- B$module153
+module153 <- module153[!is.na(module153)]
+length(module153)
+enriched_153AD <- enrichr(module153, dbs)
+enriched_153AD <- lapply(enriched_153AD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+enriched_153AD[["GO_Biological_Process_2021"]][["Term"]] <- gsub("\\(.*","",
+                                                          enriched_153AD[["GO_Biological_Process_2021"]][["Term"]])
+plotEnrich(enriched_153AD[[1]], showTerms = 20, numChar = 100, y = "Count", orderBy = "P.value", 
+           title = "GO Biological Process module 153 \n of AD network") + theme(text=element_text(size=20))
+ggsave("GO_BP_153.png", height = 7, width = 15)
+
+plotEnrich(enriched_153AD[[3]], showTerms = 20, numChar = 50, y = "Count", orderBy = "P.value", 
+           title = "KEGG module 153 of AD") + theme(text=element_text(size=20))
+ggsave("KEGG_153.png", height = 7, width = 15)
+
+```
+
+## Module 24 from MDD
+
+```{r fig.width=10}
+module24 <- B_MDD$module24
+module24 <- module24[!is.na(module24)]
+length(module24)
+enriched_24MDD <- enrichr(module24, dbs)
+enriched_24MDD <- lapply(enriched_24MDD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+enriched_24MDD[["GO_Biological_Process_2021"]][["Term"]] <- gsub("\\(.*","", enriched_24MDD[["GO_Biological_Process_2021"]][["Term"]])
+enriched_24MDD[[4]][2, 1] <- "Immunoregulatory interactions between Lymphoid and non-Lymphoid cell"
+plotEnrich(enriched_24MDD[[1]], showTerms = 20, numChar = 70, y = "Count", orderBy = "P.value", 
+           title = "GO Biological Process module 24 of \n MDD network") + theme(text=element_text(size=20))
+ggsave("GO_BP_24.png", height = 7, width = 15)
+
+plotEnrich(enriched_24MDD[[3]], showTerms = 20, numChar = 50, y = "Count", orderBy = "P.value", 
+           title = "KEGG module 24 of MDD network") + theme(text=element_text(size=20))
+ggsave("KEGG_24.png", height = 7, width = 15)
+enriched_24MDD[[4]][["Term"]] <- gsub(" Homo.*", "", enriched_24MDD[[4]][["Term"]])
+plotEnrich(enriched_24MDD[[4]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "Reactome module 24 of MDD network") + theme(text=element_text(size=20))
+ggsave("Reactome_24.png", height = 7, width = 14)
+enriched_24MDD[[5]][["Term"]] <- gsub(" WP.*", "", enriched_24MDD[[5]][["Term"]])
+plotEnrich(enriched_24MDD[[5]], showTerms = 20, numChar = 70, y = "Count", orderBy = "P.value", 
+           title = "WikiPathways module 24 of \n MDD network") + theme(text=element_text(size=20))
+ggsave("WP_24.png", height = 5, width = 12)
+```
+
+```{r}
+print(intersect(module22, module24), quote = F)
+```
+
+## Module 40 from MDD
+
+```{r fig.width=10}
+module40 <- B_MDD$module40
+module40 <- module40[!is.na(module40)]
+length(module40)
+enriched_40MDD <- enrichr(module40, dbs)
+enriched_40MDD <- lapply(enriched_40MDD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+plotEnrich(enriched_40MDD[[1]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA GO Biological Process module40 of \n MDD")
+plotEnrich(enriched_40MDD[[2]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA GO Molecular Function module40 of MDD")
+plotEnrich(enriched_40MDD[[3]], showTerms = 20, numChar = 50, y = "Count", orderBy = "P.value", title = "FEA KEGG module40 of MDD")
+plotEnrich(enriched_40MDD[[4]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA Reactome module40 of MDD")
+plotEnrich(enriched_40MDD[[5]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA WikiPathways module40 of MDD")
+```
+
+## Module 115 from MDD
+
+```{r fig.width=10}
+module115 <- B_MDD$module115
+module115 <- module115[!is.na(module115)]
+length(module115)
+enriched_115MDD <- enrichr(module115, dbs)
+enriched_115MDD <- lapply(enriched_115MDD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+plotEnrich(enriched_115MDD[[1]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA GO Biological Process module115 of \n MDD")
+plotEnrich(enriched_115MDD[[3]], showTerms = 20, numChar = 50, y = "Count", orderBy = "P.value", title = "FEA KEGG module115 of MDD")
+plotEnrich(enriched_115MDD[[5]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA WikiPathways module115 of MDD")
+```
+
+## Module 36 MDD
+
+```{r fig.width=10}
+module36 <- B_MDD$module36
+module36 <- module36[!is.na(module36)]
+length(module36)
+enriched_36MDD <- enrichr(module36, dbs)
+enriched_36MDD <- lapply(enriched_36MDD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+plotEnrich(enriched_36MDD[[1]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA GO Biological Process module36 of \n MDD")
+plotEnrich(enriched_36MDD[[2]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA GO Molecular Function module36 of MDD")
+plotEnrich(enriched_36MDD[[3]], showTerms = 20, numChar = 50, y = "Count", orderBy = "P.value", title = "FEA KEGG module36 of MDD")
+plotEnrich(enriched_36MDD[[4]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA Reactome module36 of MDD")
+plotEnrich(enriched_36MDD[[5]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA WikiPathways module36 of MDD")
+```
+
+# Module 44 from MDD
+
+```{r fig.width=10}
+module44 <- B_MDD$module44
+module44 <- module44[!is.na(module44)]
+length(module44)
+enriched_44MDD <- enrichr(module44, dbs)
+enriched_44MDD <- lapply(enriched_44MDD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+plotEnrich(enriched_44MDD[[1]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA GO Biological Process module44 of \n MDD")
+plotEnrich(enriched_44MDD[[2]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA GO Molecular Function module44 of MDD")
+plotEnrich(enriched_44MDD[[3]], showTerms = 20, numChar = 50, y = "Count", orderBy = "P.value", title = "FEA KEGG module44 of MDD")
+plotEnrich(enriched_44MDD[[4]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA Reactome module44 of MDD")
+plotEnrich(enriched_44MDD[[5]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA WikiPathways module44 of MDD")
+```
+
+## Module 48 of MDD
+
+```{r fig.width=10}
+module48 <- B_MDD$module48
+module48 <- module48[!is.na(module48)]
+length(module48)
+enriched_48MDD <- enrichr(module48, dbs)
+enriched_48MDD <- lapply(enriched_48MDD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+plotEnrich(enriched_48MDD[[1]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA GO Biological Process module48 of \n MDD")
+plotEnrich(enriched_48MDD[[2]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA GO Molecular Function module48 of MDD")
+plotEnrich(enriched_48MDD[[3]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA KEGG module48 of MDD")
+#plotEnrich(enriched_48MDD[[4]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA Reactome module48 of MDD")
+plotEnrich(enriched_48MDD[[5]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA WikiPathways module48 of MDD")
+```
+
+## Module 93 from MDD
+
+```{r fig.width=10}
+module93 <- B_MDD$module93
+module93 <- module93[!is.na(module93)]
+length(module93)
+enriched_93MDD <- enrichr(module93, dbs)
+enriched_93MDD <- lapply(enriched_93MDD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+
+enriched_93MDD[["GO_Biological_Process_2021"]][["Term"]] <- gsub("\\(.*","", 
+                                                          enriched_93MDD[["GO_Biological_Process_2021"]][["Term"]])
+plotEnrich(enriched_93MDD[[1]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "GO Biological Process module 93 of \n MDD network") + theme(text=element_text(size=20))
+ggsave("GO_BP_93.png", height = 7, width = 15)
+
+enriched_93MDD[["GO_Molecular_Function_2021"]][["Term"]] <- gsub("\\(G.*","", 
+                                                          enriched_93MDD[["GO_Molecular_Function_2021"]][["Term"]])
+plotEnrich(enriched_93MDD[[2]], showTerms = 20, numChar = 100, y = "Count", orderBy = "P.value", 
+           title = "GO Molecular Function module \n 93 of MDD network") + theme(text=element_text(size=20))
+ggsave("GO_MF_93.png", height = 7, width = 15)
+
+
+enriched_93MDD[[5]][["Term"]] <- gsub(" WP.*", "", enriched_93MDD[[5]][["Term"]])
+plotEnrich(enriched_93MDD[[5]], showTerms = 20, numChar = 100, y = "Count", orderBy = "P.value", 
+           title = "WikiPathways module 93 \n of MDD network") + theme(text=element_text(size=20))
+ggsave("Wiki_93.png", height = 7, width = 15)
+```
+
+## Module 110 from MDD
+
+```{r fig.width=10}
+module110 <- B_MDD$module110
+module110 <- module110[!is.na(module110)]
+length(module110)
+enriched_110MDD <- enrichr(module110, dbs)
+enriched_110MDD <- lapply(enriched_110MDD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+
+enriched_110MDD[["GO_Biological_Process_2021"]][["Term"]] <- gsub("\\(.*","", 
+                                                          enriched_110MDD[["GO_Biological_Process_2021"]][["Term"]])
+plotEnrich(enriched_110MDD[[1]], showTerms = 20, numChar = 100, y = "Count", orderBy = "P.value", 
+           title = "GO Biological Process module 110 \n of MDD network") + theme(text=element_text(size=20))
+ggsave("GO_BP_110.png", height = 7, width = 15)
+
+enriched_110MDD[["GO_Molecular_Function_2021"]][["Term"]] <- gsub("\\(G.*","", 
+                                                          enriched_110MDD[["GO_Molecular_Function_2021"]][["Term"]])
+plotEnrich(enriched_110MDD[[2]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "GO Molecular Function module 110 \n of MDD network") + theme(text=element_text(size=20))
+ggsave("GO_MF_110.png", height = 7, width = 15)
+
+plotEnrich(enriched_110MDD[[3]], showTerms = 20, numChar = 70, y = "Count", orderBy = "P.value", 
+           title = "KEGG module 110 of MDD network") + theme(text=element_text(size=20))
+ggsave("KEGG_110.png", height = 7, width = 15)
+
+enriched_110MDD[[4]][["Term"]] <- gsub(" Homo.*", "", enriched_110MDD[[4]][["Term"]])
+plotEnrich(enriched_110MDD[[4]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", 
+           title = "Reactome module 110 \n of MDD network") + theme(text=element_text(size=20))
+ggsave("Reactome_110.png", height = 7, width = 15)
+
+enriched_110MDD[[5]][["Term"]] <- gsub(" WP.*", "", enriched_110MDD[[5]][["Term"]])
+plotEnrich(enriched_110MDD[[5]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "WikiPathways module 110 \n of MDD network") + theme(text=element_text(size=20))
+ggsave("WP_110.png", height = 7, width = 15)
+```
+
+## Module 56 from MDD
+
+```{r fig.width=10}
+module56 <- B_MDD$module56
+module56 <- module56[!is.na(module56)]
+length(module56)
+enriched_56MDD <- enrichr(module56, dbs)
+enriched_56MDD <- lapply(enriched_56MDD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+plotEnrich(enriched_56MDD[[1]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA GO Biological Process module56 of \n MDD")
+plotEnrich(enriched_56MDD[[2]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA GO Molecular Function module56 of MDD")
+plotEnrich(enriched_56MDD[[3]], showTerms = 20, numChar = 50, y = "Count", orderBy = "P.value", title = "FEA KEGG module56 of MDD")
+plotEnrich(enriched_56MDD[[4]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA Reactome module56 of MDD")
+plotEnrich(enriched_56MDD[[5]], showTerms = 20, numChar = 60, y = "Count", orderBy = "P.value", title = "FEA WikiPathways module56 of MDD")
+```
+
+```{r}
+print(intersect(module22, module110))
+print(intersect(module39, module24)) # 14 in common 
+print(intersect(module39, module56)) # 2 in common 
+print(intersect(module39, module115)) 
+```
+
+
+# Retrieve gene names of modules for motif enrichment
+
+```{r}
+head(modulesAD)
+genes1_AD <- modulesAD %>% dplyr::filter(Module == 1)
+genes1_AD <- genes1_AD$Gene
+print(genes1_AD, quote = F)
+write.table(genes1_AD, file = "genes1_AD.txt", sep = "\t", quote = F, col.names = F, row.names = F)
+```
+
+```{r}
+genes22_AD <- modulesAD %>% dplyr::filter(Module == 22)
+genes22_AD <- genes22_AD$Gene
+print(genes22_AD, quote = F)
+write.table(genes22_AD, file = "genes22_AD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes24_MDD <- modulesMDD %>% dplyr::filter(Module == 24)
+genes24_MDD <- genes24_MDD$Gene
+print(genes24_MDD, quote = F)
+write.table(genes24_MDD, file = "genes24_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes40_MDD <- modulesMDD %>% dplyr::filter(Module == 40)
+genes40_MDD <- genes40_MDD$Gene
+print(genes40_MDD, quote = F)
+write.table(genes40_MDD, file = "genes40_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes39_AD <- modulesAD %>% dplyr::filter(Module == 39)
+genes39_AD <- genes39_AD$Gene
+print(genes39_AD, quote = F)
+write.table(genes39_AD, file = "genes39_AD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes35_AD <- modulesAD %>% dplyr::filter(Module == 35)
+genes35_AD <- genes35_AD$Gene
+print(genes35_AD, quote = F)
+write.table(genes35_AD, file = "genes35_AD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes26_AD <- modulesAD %>% dplyr::filter(Module == 26)
+genes26_AD <- genes26_AD$Gene
+print(genes26_AD, quote = F)
+write.table(genes26_AD, file = "genes26_AD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes60_AD <- modulesAD %>% dplyr::filter(Module == 60)
+genes60_AD <- genes60_AD$Gene
+print(genes60_AD, quote = F)
+write.table(genes60_AD, file = "genes60_AD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes153_AD <- modulesAD %>% dplyr::filter(Module == 153)
+genes153_AD <- genes153_AD$Gene
+print(genes153_AD, quote = F)
+write.table(genes153_AD, file = "genes153_AD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes66_AD <- modulesAD %>% dplyr::filter(Module == 66)
+genes66_AD <- genes66_AD$Gene
+print(genes66_AD, quote = F)
+write.table(genes66_AD, file = "genes66_AD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes93_AD <- modulesAD %>% dplyr::filter(Module == 93)
+genes93_AD <- genes93_AD$Gene
+print(genes93_AD, quote = F)
+write.table(genes93_AD, file = "genes93_AD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes141_AD <- modulesAD %>% dplyr::filter(Module == 141)
+genes141_AD <- genes141_AD$Gene
+print(genes141_AD, quote = F)
+write.table(genes141_AD, file = "genes141_AD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes86_AD <- modulesAD %>% dplyr::filter(Module == 86)
+genes86_AD <- genes86_AD$Gene
+print(genes86_AD, quote = F)
+write.table(genes86_AD, file = "genes86_AD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes51_AD <- modulesAD %>% dplyr::filter(Module == 51)
+genes51_AD <- genes51_AD$Gene
+print(genes51_AD, quote = F)
+write.table(genes51_AD, file = "genes51_AD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes36_MDD <- modulesMDD %>% dplyr::filter(Module == 36)
+genes36_MDD <- genes36_MDD$Gene
+print(genes36_MDD, quote = F)
+write.table(genes36_MDD, file = "genes36_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes93_MDD <- modulesMDD %>% dplyr::filter(Module == 93)
+genes93_MDD <- genes93_MDD$Gene
+print(genes93_MDD, quote = F)
+write.table(genes93_MDD, file = "genes93_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes115_MDD <- modulesMDD %>% dplyr::filter(Module == 115)
+genes115_MDD <- genes115_MDD$Gene
+print(genes115_MDD, quote = F)
+write.table(genes115_MDD, file = "genes115_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes48_MDD <- modulesMDD %>% dplyr::filter(Module == 48)
+genes48_MDD <- genes48_MDD$Gene
+print(genes48_MDD, quote = F)
+write.table(genes48_MDD, file = "genes48_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes44_MDD <- modulesMDD %>% dplyr::filter(Module == 44)
+genes44_MDD <- genes44_MDD$Gene
+print(genes44_MDD, quote = F)
+write.table(genes44_MDD, file = "genes44_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes49_MDD <- modulesMDD %>% dplyr::filter(Module == 49)
+genes49_MDD <- genes49_MDD$Gene
+print(genes49_MDD, quote = F)
+write.table(genes49_MDD, file = "genes49_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes110_MDD <- modulesMDD %>% dplyr::filter(Module == 110)
+genes110_MDD <- genes110_MDD$Gene
+print(genes110_MDD, quote = F)
+write.table(genes110_MDD, file = "genes110_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes37_MDD <- modulesMDD %>% dplyr::filter(Module == 37)
+genes37_MDD <- genes37_MDD$Gene
+print(genes37_MDD, quote = F)
+write.table(genes37_MDD, file = "genes37_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes63_MDD <- modulesMDD %>% dplyr::filter(Module == 63)
+genes63_MDD <- genes63_MDD$Gene
+print(genes63_MDD, quote = F)
+write.table(genes63_MDD, file = "genes63_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes81_MDD <- modulesMDD %>% dplyr::filter(Module == 81)
+genes81_MDD <- genes81_MDD$Gene
+print(genes81_MDD, quote = F)
+write.table(genes81_MDD, file = "genes81_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+```{r}
+genes56_MDD <- modulesMDD %>% dplyr::filter(Module == 56)
+genes56_MDD <- genes56_MDD$Gene
+print(genes56_MDD, quote = F)
+write.table(genes56_MDD, file = "genes56_MDD.txt", sep = "\t", quote = F, col.names = F,
+            row.names = F)
+```
+
+# Functional enrichment analysis with only ChIP-seq databases
+
+```{r}
+dbs <- c("ChEA_2016", "ENCODE_TF_ChIP-seq_2015", "ChEA_2022")
+```
+
+AD
+
+```{r}
+modules <- paste0("module", c(1:155))
+for (module in modules){
+  modGenes <- (modules == module)
+  modIds <- B[module]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  symbols <- modIds$GeneSymbol
+  enriched <- enrichr(symbols, dbs)
+  enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+  lapply(enriched, function(x) write.table(data.frame(x),
+                                      paste0('MotifEnrich_ens_ChIP/Enrichment_',module,'.txt'),
+                                           append = T, sep='\t', quote = F))
+}
+```
+
+MDD
+
+```{r}
+modules <- paste0("module", c(1:156))
+# from Vanessa
+for (module in modules){
+  modGenes <- (modules == module)
+  modIds <- B_MDD[module]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  symbols <- modIds$GeneSymbol
+  enriched <- enrichr(symbols, dbs)
+  enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+  lapply(enriched, function(x) write.table(data.frame(x),
+                                    paste0('MotifEnrich_ens_ChIP/EnrichmentMDD_',module,'.txt'),
+                                           append = T, sep='\t', quote = F, col.names = T))
+}
+```
+
+overlap between ChEA 2016 and ChEA 2022
+
+```{r}
+dbs <- c("ChEA_2016", "ENCODE_TF_ChIP-seq_2015", "ChEA_2022")
+module22 <- B$module22
+module22 <- module22[!is.na(module22)]
+length(module22)
+enriched_22AD <- enrichr(module22, dbs)
+enriched_22AD <- lapply(enriched_22AD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+enriched_22AD[[1]]
+enriched_22AD[[3]]
+```
+
+```{r}
+module2 <- B$module2
+module2 <- module2[!is.na(module2)]
+length(module2)
+enriched_2AD <- enrichr(module2, dbs)
+enriched_2AD <- lapply(enriched_2AD, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+enriched_2AD[[1]]
+enriched_2AD[[3]]
+```

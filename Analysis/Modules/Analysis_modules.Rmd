@@ -1,0 +1,332 @@
+---
+title: "Analysis modules"
+author: "Hanne Puype"
+date: "2022-10-25"
+output:  
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Load in modules 
+```{r}
+modulesAD <- read.table("kmed_modules_AD.txt", header = F, sep = "\t")
+modulesMDD <- read.table("kmed_modules_MDD.txt", header = F, sep = "\t")
+colnames(modulesAD) <- c("Gene", "Module")
+colnames(modulesMDD) <- c("Gene", "Module")
+library(tidyverse)
+modulesAD <- as_tibble(modulesAD)
+modulesMDD <- as_tibble(modulesMDD)
+```
+
+# Number of genes and names
+
+```{r}
+df = data.frame()
+
+for (i in 1:155) {
+    Module <- modulesAD %>% filter(Module == i)
+    output = length(Module$Gene)
+    df = rbind(df, output)
+    comma_vec <- paste(Module$Gene, collapse = ", ")
+    df[i, 2] <- comma_vec
+}
+head(df)
+write.table(df, file = "length_Mod_AD.tsv", quote = F, row.names = F, sep = "\t")
+```
+
+```{r}
+df = data.frame()
+
+for (i in 1:156) {
+    Module <- modulesMDD %>% filter(Module == i)
+    output = length(Module$Gene)
+    df = rbind(df, output)
+    comma_vec <- paste(Module$Gene, collapse = ", ")
+    df[i, 2] <- comma_vec
+}
+head(df)
+write.table(df, file = "length_Mod_MDD.tsv", quote = F, row.names = F, sep = "\t")
+```
+
+# Regulators
+```{r}
+reg_AD <- read.table("reg_clust_ens_AD.txt")
+head(reg_AD)
+reg_MDD <- read.table("reg_clust_ens_MDD.txt")
+head(reg_MDD)
+```
+
+```{r}
+df = data.frame()
+for (i in 1:155) {
+    Reg <- reg_AD %>% filter(V2 == i)
+    output = length(Reg$V1)
+    df = rbind(df, output)
+    comma_vec <- paste(Reg$V1, collapse = ", ")
+    df[i, 2] <- comma_vec
+}
+head(df)
+write.table(df, file = "reg_Mod_AD.tsv", quote = F, row.names = F, sep = "\t")
+```
+
+```{r}
+df = data.frame()
+for (i in 1:156) {
+    Reg <- reg_MDD %>% filter(V2 == i)
+    output = length(Reg$V1)
+    df = rbind(df, output)
+    comma_vec <- paste(Reg$V1, collapse = ", ")
+    df[i, 2] <- comma_vec
+}
+tail(df)
+write.table(df, file = "reg_Mod_MDD.tsv", quote = F, row.names = F, sep = "\t")
+```
+
+# Known regulatory interactions 
+load networks 
+```{r}
+gri <- read.delim("Omnipath.txt")
+dbTF <- read.csv("dbTF.csv", sep="")
+gri <- gri %>% filter(source_genesymbol %in% dbTF$Gene_symbol)
+dim(gri)
+frontal_lobe_adult <- read.delim("networks/FANTOM5_individual_networks/394_individual_networks/frontal_lobe_adult.txt.gz", header=FALSE)
+frontal_lobe_adult <- frontal_lobe_adult %>% filter(V1 %in% dbTF$Gene_symbol)
+frontal_lobe_adult <- frontal_lobe_adult %>% arrange(desc(V3))
+```
+
+Load ensemble networks 
+```{r}
+network_AD <- read.table("ensemble_netw_AD.txt", header = T, sep = "\t")
+head(network_AD)
+network_MDD <- read.table("ensemble_netw_MDD.txt", header = T, sep = "\t")
+```
+
+Format for intersection
+```{r}
+network_AD$concat <- paste(network_AD$TF, network_AD$Target_gene, sep = ":")
+network_MDD$concat <- paste(network_MDD$TF, network_MDD$Target_gene, sep = ":")
+edgesAD <- network_AD$concat
+edgesMDD <- network_MDD$concat
+edges_OmniPath <- gri %>% dplyr::select(source_genesymbol, target_genesymbol)
+edges_OmniPath$concat <- paste(edges_OmniPath$source_genesymbol, edges_OmniPath$target_genesymbol, sep = ":")
+edges_OP <- edges_OmniPath$concat
+frontal_lobe_adult$concat <- paste(frontal_lobe_adult$V1, frontal_lobe_adult$V2, sep = ":")
+edges_Marbach <- frontal_lobe_adult$concat
+```
+
+```{r}
+frontal_lobe_adult_2 <- frontal_lobe_adult %>% slice(1:100000)
+dim(frontal_lobe_adult_2)
+tail(frontal_lobe_adult_2)
+edges_Marbach <- frontal_lobe_adult_2$concat
+```
+
+Intersection
+```{r}
+length(intersect(edgesAD, edges_OP))
+length(intersect(edgesMDD, edges_OP))
+length(intersect(edgesAD, edges_Marbach))
+length(intersect(edgesMDD, edges_Marbach))
+```
+
+```{r}
+length(intersect(edges_OP, edges_Marbach))
+```
+
+
+OmniPath + Marbach 
+```{r}
+length(c(edges_OP, edges_Marbach)[duplicated(c(edges_OP, edges_Marbach))]) #4290 in common
+edges_GT <- unique(c(edges_OP, edges_Marbach))
+length(edges_GT)
+```
+
+# Overlap ensemble, single-cell and ground truth 
+```{r}
+network_sc_AD <- read.table("Single-cell/edgelist_sc_AD.txt", sep = "\t", header = T)
+network_sc_MDD <- read.table("Single-cell/edgelist_sc_MDD.txt", sep = "\t", header = T)
+network_sc_AD$concat <- paste(network_sc_AD$regulator, network_sc_AD$gene, sep = ":")
+network_sc_MDD$concat <- paste(network_sc_MDD$regulator, network_sc_MDD$gene, sep = ":")
+edges_sc_AD <- network_sc_AD$concat
+edges_sc_MDD <- network_sc_MDD$concat
+```
+
+Put intersections into dataframe and split again into TF and target gene
+```{r}
+intersect_AD_OP <- intersect(edgesAD, edges_OP)
+intersect_MDD_OP <- intersect(edgesMDD, edges_OP)
+intersect_AD_OP2 <- data.frame(intersect_AD_OP)
+intersect_MDD_OP2 <- data.frame(intersect_MDD_OP)
+head(intersect_AD_OP2)
+intersect_AD_OP2[c('TF', 'TG')] <- str_split_fixed(intersect_AD_OP2$intersect_AD_OP, ':', 2)
+intersect_AD_OP2 <- intersect_AD_OP2 %>% select(-intersect_AD_OP)
+intersect_MDD_OP2[c('TF', 'TG')] <- str_split_fixed(intersect_MDD_OP2$intersect_MDD_OP, ':', 2)
+intersect_MDD_OP2 <- intersect_MDD_OP2 %>% select(-intersect_MDD_OP)
+head(intersect_MDD_OP2)
+```
+
+```{r}
+intersect_AD_Ma <- intersect(edgesAD, edges_Marbach)
+intersect_MDD_Ma <- intersect(edgesMDD, edges_Marbach)
+intersect_AD_Ma2 <- data.frame(intersect_AD_Ma)
+intersect_MDD_Ma2 <- data.frame(intersect_MDD_Ma)
+intersect_AD_Ma2[c('TF', 'TG')] <- str_split_fixed(intersect_AD_Ma2$intersect_AD_Ma, ':', 2)
+intersect_AD_Ma2 <- intersect_AD_Ma2 %>% select(-intersect_AD_Ma)
+intersect_MDD_Ma2[c('TF', 'TG')] <- str_split_fixed(intersect_MDD_Ma2$intersect_MDD_Ma, ':', 2)
+intersect_MDD_Ma2 <- intersect_MDD_Ma2 %>% select(-intersect_MDD_Ma)
+```
+
+
+## Known interactions in modules 
+TG in which module? --> also regulator inferred?  
+Add number of module to df, order according to module and look 
+```{r}
+head(modulesAD)
+head(intersect_AD_OP2)
+intersect_AD <- left_join(intersect_AD_OP2, modulesAD, by = c("TG" = "Gene"))
+head(intersect_AD)
+intersect_AD <- intersect_AD %>% arrange(Module)
+
+head(intersect_MDD_OP2)
+intersect_MDD <- left_join(intersect_MDD_OP2, modulesMDD, by = c("TG" = "Gene"))
+head(intersect_MDD)
+intersect_MDD <- intersect_MDD %>% arrange(Module)
+```
+
+```{r}
+write.table(intersect_AD, file = "intersect_AD_OP.txt", sep = "\t", row.names = F, quote = F, col.names = T)
+write.table(intersect_MDD, file = "intersect_MDD_OP.txt", sep = "\t", row.names = F, quote = F, col.names = T)
+```
+
+See excel file Overview modules  
+Module 22 from AD: also TAL1-CSF3R  
+Module 39 from AD: TAL1-CXCL16; SPI1-ITGAL; SPI1-PTPN6  
+
+```{r}
+intersect_AD <- left_join(intersect_AD_Ma2, modulesAD, by = c("TG" = "Gene"))
+intersect_AD <- intersect_AD %>% arrange(Module)
+head(intersect_AD)
+intersect_MDD <- left_join(intersect_MDD_Ma2, modulesMDD, by = c("TG" = "Gene"))
+head(intersect_MDD)
+intersect_MDD <- intersect_MDD %>% arrange(Module)
+```
+
+In format to paste into excel file  
+Regulators must also be inferred for modules 
+```{r}
+reg_clust_AD <- read.delim("C:/UGent/Master 2/Master's dissertation/R/reg_clust_ens_AD.txt", header=FALSE)
+reg_clust_MDD <- read.delim("C:/UGent/Master 2/Master's dissertation/R/reg_clust_ens_MDD.txt", header=FALSE)
+head(reg_clust_AD)
+intersect_AD1 <- merge(intersect_AD, reg_clust_AD, by.x = "TF", by.y = "V1")
+head(intersect_AD1)
+intersect_AD1 <- intersect_AD1 %>% arrange(Module)
+intersect_AD1$new_col <- ifelse(intersect_AD1$Module == intersect_AD1$V2, 'A',
+                ifelse(intersect_AD1$Module != intersect_AD1$V2, 'B', "C"))
+intersect_AD1 <- intersect_AD1 %>% filter(new_col == "A") %>% select(TF, TG, Module)
+intersect_AD1$concat <- paste(intersect_AD1$TF, intersect_AD1$TG, sep = "-")
+dim(intersect_AD1)
+intersect_AD1 <- intersect_AD1 %>% select(concat, Module)
+write.table(intersect_AD1, file = "intersect_AD_Ma_mod.txt", sep = "\t", row.names = F, quote = F, col.names = T)
+```
+
+
+```{r}
+intersect_MDD1 <- merge(intersect_MDD, reg_clust_MDD, by.x = "TF", by.y = "V1")
+head(intersect_MDD1)
+intersect_MDD1 <- intersect_MDD1 %>% arrange(Module)
+intersect_MDD1$new_col <- ifelse(intersect_MDD1$Module == intersect_MDD1$V2, 'A',
+                ifelse(intersect_MDD1$Module != intersect_MDD1$V2, 'B', "C"))
+intersect_MDD1 <- intersect_MDD1 %>% filter(new_col == "A") %>% select(TF, TG, Module)
+intersect_MDD1$concat <- paste(intersect_MDD1$TF, intersect_MDD1$TG, sep = "-")
+head(intersect_MDD1)
+dim(intersect_MDD1)
+intersect_MDD1 <- intersect_MDD1 %>% select(concat, Module)
+write.table(intersect_MDD1, file = "intersect_MDD_Ma_mod.txt", sep = "\t", row.names = F, quote = F, col.names = T)
+```
+
+
+## Network figure with significant modules
+And with all immune modules 
+```{r}
+head(reg_AD)
+reg_AD_sign <- reg_AD %>% filter(V2 == 21 | V2 == 35 | V2 == 26 | V2 == 40 | V2 == 58 | V2 == 60 | V2 == 66 | 
+                                   V2 == 85 | V2 == 87 | V2 == 105 | V2 == 123 | V2 == 129 | V2 == 130 | V2 == 150 |
+                                   V2 == 153| V2 == 22 | V2 == 4 | V2 == 9 | V2 == 36 | V2 == 39 | V2 == 51 | 
+                                   V2 == 86 | 
+                                   V2 == 93 | V2 == 139 | V2 == 141)
+dim(reg_AD_sign)
+reg_MDD_sign <- reg_MDD %>% filter(V2 == 3 | V2 == 12 | V2 == 24 | V2 == 36 | V2 == 44 | V2 == 48 | V2 == 50 | 
+                                     V2 == 49 | V2 == 93 | V2 == 110 | V2 == 115 | V2 == 4 | V2 == 37 | V2 == 56 | 
+                                     V2 == 59 | V2 == 61 | V2 == 63 | V2 == 81 | V2 == 147)
+reg_AD_sign %>% group_by(V2) %>% summarise(n())
+reg_MDD_sign %>% group_by(V2) %>% summarise(n())
+write.csv(reg_AD_sign, "reg_AD_sign.csv", quote = F, row.names = F)
+write.csv(reg_MDD_sign, "reg_MDD_sign.csv", quote = F, row.names = F)
+```
+
+# Overlap of prioritized modules 
+```{r}
+modulesAD_prior <- modulesAD %>% filter(Module == 21 | Module == 35 | Module == 26 | Module == 40 | Module == 58 |
+                                    Module == 60 | Module == 66 | Module == 85 | Module == 87 | Module == 105 |
+                                    Module == 123 | Module == 129 | Module == 130 | Module == 150 |
+                                    Module == 153| Module == 22 | Module == 4 | Module == 9 | Module == 36 | 
+                                    Module == 39 | Module == 51 | Module == 86 | 
+                                   Module == 93 | Module == 139 | Module == 141)
+modulesMDD_prior <- modulesMDD %>% filter(Module == 3 | Module == 12 | Module == 24 | Module == 36 | Module == 44 |
+                                            Module == 48 |Module == 50 |  Module == 49 | Module == 93 | 
+                                            Module == 110 | Module == 115 | Module == 4 | Module == 37 | 
+                                            Module == 56 | Module == 59 | Module == 61 | Module == 63 | 
+                                            Module == 81 | Module == 147)
+```
+
+```{r}
+intersection_modules <- c()
+name_intersec <- c()
+for (module in unique(modulesAD_prior$Module)) {
+  modulesAD_module <- modulesAD_prior %>% filter(Module == module)
+  for (module2 in unique(modulesMDD_prior$Module)) {
+    modulesMDD_module <- modulesMDD_prior %>% filter(Module == module2)
+    intersection <- length(intersect(modulesAD_module$Gene, modulesMDD_module$Gene))
+    intersection_modules <- append(intersection_modules, intersection)
+    name_intersec <- append(name_intersec, paste0("Mod_AD", module, "-", "Mod_MDD", module2))
+  }
+}
+df <- data.frame(intersection_modules, name_intersec)
+# for every module in AD and for every module in MDD 
+# save the overlap of the number of genes
+# save also the name of the overlap
+```
+
+
+```{r}
+df <- df %>% arrange(desc(intersection_modules)) %>% select(name_intersec, intersection_modules)
+write.csv(df, file = "overlap_prioritized_modules.csv", col.names = T, row.names = F, quote = F)
+```
+
+## TFs
+```{r}
+intersection_modules <- c()
+name_intersec <- c()
+for (module in unique(reg_AD_sign$V2)) {
+  modulesAD_regs <- reg_AD_sign %>% filter(V2 == module)
+  for (module2 in unique(reg_MDD_sign$V2)) {
+    modulesMDD_regs <- reg_MDD_sign %>% filter(V2 == module2)
+    intersection <- length(intersect(modulesAD_regs$V1, modulesMDD_regs$V1))
+    intersection_modules <- append(intersection_modules, intersection)
+    name_intersec <- append(name_intersec, paste0("Mod_AD", module, "-", "Mod_MDD", module2))
+  }
+}
+df <- data.frame(intersection_modules, name_intersec)
+```
+
+```{r}
+df <- df %>% arrange(desc(intersection_modules)) %>% select(name_intersec, intersection_modules)
+write.csv(df, file = "overlap_prioritized_modules_regs.csv", col.names = T, row.names = F, quote = F)
+```
+
+
