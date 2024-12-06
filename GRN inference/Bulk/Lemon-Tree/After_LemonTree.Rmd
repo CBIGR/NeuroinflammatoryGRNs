@@ -1,0 +1,170 @@
+---
+title: "After_LemonTree"
+author: "Hanne Puype"
+date: "1 december 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+# Lemon-Tree
+Modules
+```{r}
+modulesAD <- read.table("tight_clustersAD.txt")
+modulesMDD <- read.table("tight_clustersMDD.txt")
+head(modulesAD)
+head(modulesMDD)
+dim(modulesAD)
+dim(modulesMDD)
+modulesAD %>% group_by(V2) %>% summarise(n())
+modulesMDD %>% group_by(V2) %>% summarise(n())
+```
+
+Regulators 
+```{r}
+regulators_topAD <- read.table("reg_tfAD.topreg.txt")
+regulators_topMDD <- read.table("reg_tfMDD.topreg.txt")
+head(regulators_topAD)
+head(regulators_topMDD)
+dim(regulators_topAD)
+dim(regulators_topMDD)
+regulators_topAD %>% group_by(V2) %>% summarise(n())
+regulators_topAD %>% group_by(V1) %>% summarise(n())
+regulators_topMDD %>% group_by(V2) %>% summarise(n())
+regulators_topMDD %>% group_by(V1) %>% summarise(n())
+```
+
+```{r}
+regulatorsAD <- read.table("reg_tfAD.allreg.txt")
+regulatorsMDD <- read.table("reg_tfMDD.allreg.txt")
+dim(regulatorsAD)
+dim(regulatorsMDD)
+regulatorsAD_f <- regulatorsAD %>% filter(V3 > 3)
+dim(regulatorsAD_f)
+regulatorsAD_f4 <- regulatorsAD %>% filter(V3 >= 4)
+dim(regulatorsAD_f4)
+regulatorsMDD_f3 <- regulatorsMDD %>% filter(V3 > 3)
+dim(regulatorsMDD_f3)
+regulatorsMDD_f4 <- regulatorsMDD %>% filter(V3 >= 4)
+dim(regulatorsMDD_f4)
+regulatorsAD_f %>% group_by(V1) %>% summarise(n())
+regulatorsMDD_f3 %>% group_by(V1) %>% summarise(n())
+regulatorsAD_f %>% group_by(V2) %>% summarise(n())
+```
+
+## Convert to regulatory edge list like GENIE3 and CLR
+Add all regulators to target genes of that module  
+two files: gene module list, TF module list  
+output: column reg, column TG, column weight  
+```{r}
+genesAD <- read.table("tight_clustersAD.txt")
+head(genesAD)
+dim(genesAD)
+tail(genesAD)
+regulators_AD <- read.table("reg_tfAD.topreg.txt")
+head(regulators_AD)
+tail(regulators_AD)
+dim(regulators_AD)
+output_AD <- full_join(regulators_AD, genesAD, by = "V2")
+head(output_AD)
+dim(output_AD)
+tail(output_AD)
+colnames(output_AD)[names(output_AD) == "V1.x"] <- "Regulator"
+colnames(output_AD)[names(output_AD) == "V1.y"] <- "Target_gene"
+colnames(output_AD)[names(output_AD) == "V3"] <- "Weight"
+output_AD <- output_AD %>% select(Regulator, Target_gene, Weight)
+```
+
+```{r}
+genesMDD <- read.table("tight_clustersMDD.txt")
+head(genesMDD)
+dim(genesMDD)
+tail(genesMDD)
+regulators_MDD <- read.table("reg_tfMDD.topreg.txt")
+head(regulators_MDD)
+dim(regulators_MDD)
+output_MDD <- full_join(regulators_MDD, genesMDD, by = "V2")
+head(output_MDD)
+dim(output_MDD)
+tail(output_MDD)
+colnames(output_MDD)[names(output_MDD) == "V1.x"] <- "Regulator"
+colnames(output_MDD)[names(output_MDD) == "V1.y"] <- "Target_gene"
+colnames(output_MDD)[names(output_MDD) == "V3"] <- "Weight"
+output_MDD <- output_MDD %>% select(Regulator, Target_gene, Weight)
+```
+
+```{r}
+write.table(output_AD, file = "EdgeListLT_AD.csv", sep = ",", col.names = T, row.names = F, quote = F)
+write.table(output_MDD, file = "EdgeListLT_MDD.csv", sep = ",", col.names = T, row.names = F, quote = F)
+```
+
+## Select top edges 
+AD 
+```{r}
+allreg_AD <- read.table("reg_tfAD.allreg.txt")
+head(allreg_AD)
+allreg_AD <- allreg_AD %>% arrange(desc(V3))
+dim(allreg_AD)
+randomreg_AD <- read.table("reg_tfAD.randomreg.txt") # random regulators
+randomreg_AD <- randomreg_AD %>% arrange(desc(V3))
+head(randomreg_AD)
+
+allreg_AD_f <- allreg_AD %>% filter(V3 > 2) #for 100000 edges
+dim(allreg_AD_f)
+head(allreg_AD_f)
+```
+
+```{r}
+output_AD <- full_join(allreg_AD_f, genesAD, by = "V2")
+dim(output_AD) #149903
+tail(output_AD)
+colnames(output_AD)[names(output_AD) == "V1.x"] <- "Regulator"
+colnames(output_AD)[names(output_AD) == "V1.y"] <- "Target_gene"
+colnames(output_AD)[names(output_AD) == "V3"] <- "Weight"
+output_AD <- output_AD %>% select(Regulator, Target_gene, Weight)
+head(output_AD)
+output_AD <- output_AD %>% arrange(desc("Weight"))
+# Filter out genes where regulator = target gene
+output_AD <- output_AD %>% filter(!(Regulator == Target_gene))
+dim(output_AD) #149651 --> 252 gone
+output_AD <- output_AD %>% slice(c(1:100000))
+```
+
+MDD
+```{r}
+allreg_MDD <- read.table("reg_tfMDD.allreg.txt")
+head(allreg_MDD)
+dim(allreg_MDD)
+randomreg_MDD <- read.table("reg_tfMDD.randomreg.txt")
+randomreg_MDD <- randomreg_MDD %>% arrange(desc(V3))
+head(randomreg_MDD)
+
+allreg_MDD_f <- allreg_MDD %>% filter(V3 > 2.5) #for 100 000 edges
+dim(allreg_MDD_f)
+```
+
+```{r}
+output_MDD <- full_join(allreg_MDD_f, genesMDD, by = "V2")
+dim(output_MDD) #103203
+head(output_MDD)
+output_MDD <- output_MDD %>% arrange(desc(V3))
+colnames(output_MDD)[names(output_MDD) == "V1.x"] <- "Regulator"
+colnames(output_MDD)[names(output_MDD) == "V1.y"] <- "Target_gene"
+colnames(output_MDD)[names(output_MDD) == "V3"] <- "Weight"
+output_MDD <- output_MDD %>% select(Regulator, Target_gene, Weight)
+output_MDD <- output_MDD %>% filter(!(Regulator == Target_gene)) # Filter out genes where regulator = target gene
+dim(output_MDD) #102874 --> 356 gone
+output_MDD <- output_MDD %>% slice(c(1:100000))
+```
+
+Top 100 000 edges
+```{r}
+write.table(output_AD, file = "EdgeListLT3_AD.csv", sep = ",", col.names = T, row.names = F, quote = F)
+write.table(output_MDD, file = "EdgeListLT3_MDD.csv", sep = ",", col.names = T, row.names = F, quote = F)
+```

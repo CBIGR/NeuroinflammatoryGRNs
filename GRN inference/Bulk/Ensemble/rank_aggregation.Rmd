@@ -1,0 +1,164 @@
+---
+title: "Rank aggregation"
+author: "Hanne Puype"
+date: '2022-03-23'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Rank aggregation with Borda
+https://cran.r-project.org/web/packages/TopKLists/vignettes/TopKLists.pdf  
+https://cran.r-project.org/web/packages/TopKLists/TopKLists.pdf  
+
+## Packages
+```{r}
+#install.packages("TopKLists")
+library(TopKLists)
+library(tidyverse)
+```
+
+## Prepare networks
+```{r}
+edgesAD1 <- read.table("edgesAD1.txt", sep = ",", header = F)
+edgesAD2 <- read.table("edgesAD2.txt", sep = ",", header = F)
+edgesAD3 <- read.table("edgesAD3.txt", sep = ",", header = F)
+edgesMDD1 <- read.table("edgesMDD1.txt", sep = ",", header = F)
+edgesMDD2 <- read.table("edgesMDD2.txt", sep = ",", header = F)
+edgesMDD3 <- read.table("edgesMDD3.txt", sep = ",", header = F)
+head(edgesAD1)
+```
+
+```{r}
+edgesAD1 <- edgesAD1$V1
+edgesAD2 <- edgesAD2$V1
+edgesAD3 <- edgesAD3$V1
+edgesMDD1 <- edgesMDD1$V1
+edgesMDD2 <- edgesMDD2$V1
+edgesMDD3 <- edgesMDD3$V1
+```
+
+```{r}
+list_edges_AD <- list(as.list(edgesAD1), as.list(edgesAD2), as.list(edgesAD3))
+summary(list_edges_AD)
+list_edges_MDD <- list(as.list(edgesMDD1), as.list(edgesMDD2), as.list(edgesMDD3))
+```
+
+## Borda
+### AD
+```{r}
+rankaggr_AD <- Borda(list_edges_AD, k = 100000)
+head(rankaggr_AD$TopK)
+dim(rankaggr_AD$TopK)
+head(rankaggr_AD$Scores)
+dim(rankaggr_AD$Scores)
+tail(rankaggr_AD$Scores)
+```
+
+#### Back to edge list
+```{r}
+rank_aggr_AD_mean <- rankaggr_AD$TopK[,"mean"]
+head(rank_aggr_AD_mean)
+rank_aggr_AD_mean <- as.data.frame(rank_aggr_AD_mean)
+rank_aggr_AD_mean[c('TF', 'Target_gene')] <- str_split_fixed(rank_aggr_AD_mean$rank_aggr_AD_mean, ':', 2)
+rank_aggr_AD_mean <- rownames_to_column(rank_aggr_AD_mean) #add rank
+names(rank_aggr_AD_mean)[colnames(rank_aggr_AD_mean) == "rowname"] <- "Rank"
+rank_aggr_AD_mean <- rank_aggr_AD_mean %>% select(TF, Target_gene, Rank)
+head(rank_aggr_AD_mean)
+rank_aggr_AD_mean <- rank_aggr_AD_mean %>% add_column("Score" = rankaggr_AD$Scores[c(1:100000), "mean"])
+```
+
+### MDD
+```{r}
+rankaggr_MDD <- Borda(list_edges_MDD, k = 100000)
+head(rankaggr_MDD$TopK)
+dim(rankaggr_MDD$TopK)
+head(rankaggr_MDD$Scores)
+tail(rankaggr_MDD$Scores)
+```
+
+#### Back to edge list
+```{r}
+rank_aggr_MDD_mean <- rankaggr_MDD$TopK[,"mean"]
+head(rank_aggr_MDD_mean)
+rank_aggr_MDD_mean <- as.data.frame(rank_aggr_MDD_mean)
+rank_aggr_MDD_mean[c('TF', 'Target_gene')] <- str_split_fixed(rank_aggr_MDD_mean$rank_aggr_MDD_mean, ':', 2)
+rank_aggr_MDD_mean <- rownames_to_column(rank_aggr_MDD_mean)
+names(rank_aggr_MDD_mean)[colnames(rank_aggr_MDD_mean) == "rowname"] <- "Rank"
+rank_aggr_MDD_mean <- rank_aggr_MDD_mean %>% select(TF, Target_gene, Rank)
+rank_aggr_MDD_mean <- rank_aggr_MDD_mean %>% add_column("Score" = rankaggr_MDD$Scores[c(1:100000), "mean"])
+head(rank_aggr_MDD_mean)
+```
+
+## Save files
+```{r}
+write.table(rank_aggr_AD_mean, file = "ensemble_netw_AD.txt", sep = "\t", col.names = T, row.names = F, 
+            quote = F)
+write.table(rank_aggr_MDD_mean, file = "ensemble_netw_MDD.txt", sep = "\t", col.names = T, row.names = F, 
+            quote = F)
+```
+
+```{r}
+Borda.plot(rankaggr_AD, k = 100)
+Borda.plot(rankaggr_MDD, k = 100)
+```
+
+# Overlap between ensemble network and initial networks
+Will also see then if one method has bigger influence than the others or not
+```{r}
+edges_ens_AD <- rankaggr_AD$TopK[,"mean"]
+head(edges_ens_AD)
+edges_ens_MDD <- rankaggr_MDD$TopK[, "mean"]
+```
+
+```{r}
+overlap_G3AD <- Reduce(intersect,list(edgesAD1,edges_ens_AD)) # GENIE3
+length(overlap_G3AD) #53029
+overlap_CLRAD <- Reduce(intersect,list(edgesAD2,edges_ens_AD)) # CLR
+length(overlap_CLRAD) #47513
+overlap_LTAD <- Reduce(intersect,list(edgesAD3,edges_ens_AD)) # Lemon-Tree
+length(overlap_LTAD) #48105
+```
+
+```{r}
+overlap_G3MDD <- Reduce(intersect,list(edgesMDD1,edges_ens_MDD)) # GENIE3
+length(overlap_G3MDD) #58810
+overlap_CLRMDD <- Reduce(intersect,list(edgesMDD2,edges_ens_MDD)) # CLR
+length(overlap_CLRMDD) #54358
+overlap_LTMDD <- Reduce(intersect,list(edgesMDD3,edges_ens_MDD)) # Lemon-Tree
+length(overlap_LTMDD) #49779
+```
+
+# Number of nodes and TFs left in the ensemble network
+```{r}
+RegulatorAD <- rank_aggr_AD_mean$TF
+RegulatorAD <- unique(RegulatorAD)
+length(RegulatorAD) #1041 regulators
+Target_gene <- rank_aggr_AD_mean$Target_gene
+Target_gene <- unique(Target_gene)
+length(Target_gene) #9675 target genes 
+nodesAD <- c(RegulatorAD, Target_gene)
+nodesAD <- unique(nodesAD)
+length(nodesAD) #9685 nodes
+```
+
+```{r}
+RegulatorMDD <- rank_aggr_MDD_mean$TF
+RegulatorMDD <- unique(RegulatorMDD)
+length(RegulatorMDD) #1101 regulators
+Target_gene <- rank_aggr_MDD_mean$Target_gene
+Target_gene <- unique(Target_gene)
+length(Target_gene) #9006 target genes 
+nodesMDD <- c(RegulatorMDD, Target_gene)
+nodesMDD <- unique(nodesMDD)
+length(nodesMDD) #9021 nodes
+```
+
+overlap of nodes between AD and MDD
+```{r}
+length(Reduce(intersect, list(nodesAD, nodesMDD)))
+```
+
+for edges: see netw_char_ensemble

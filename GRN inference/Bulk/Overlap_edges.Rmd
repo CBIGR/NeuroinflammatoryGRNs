@@ -1,0 +1,383 @@
+---
+title: "Overlap edges"
+author: "Hanne Puype"
+date: "11 december 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Format of edges to compare 
+
+## GENIE3
+```{r}
+library(tidyverse)
+linklistAD <- read.table("LinkList_AD_top.csv", header = T, sep = ",")
+head(linklistAD)
+#linklistAD <- linklistAD %>% dplyr::slice(c(1:100000))
+linklistMDD <- read.table("LinkList_MDD_top.csv", header = T, sep = ",")
+head(linklistMDD)
+#linklistMDD <- linklistMDD %>% slice(c(1:100000))
+linklistAD$concat <- paste(linklistAD$regulatoryGene, linklistAD$targetGene, sep = ":")
+edgesAD1 <- linklistAD$concat
+linklistMDD$concat <- paste(linklistMDD$regulatoryGene, linklistMDD$targetGene, sep = ":")
+edgesMDD1 <- linklistMDD$concat
+```
+
+## CLR
+```{r}
+networkCLR_AD <- read.table("network_AD_reg.csv", header = T, sep = ",")
+head(networkCLR_AD)
+#networkCLR_AD <- networkCLR_AD %>% slice(c(1:100000))
+networkCLR_MDD <- read.table("network_MDD_reg.csv", header = T, sep = ",")
+head(networkCLR_MDD)
+#networkCLR_MDD <- networkCLR_MDD %>% slice(c(1:100000))
+networkCLR_AD$concat <- paste(networkCLR_AD$gene1, networkCLR_AD$gene2, sep = ":")
+edgesAD2 <- networkCLR_AD$concat
+networkCLR_MDD$concat <- paste(networkCLR_MDD$gene1, networkCLR_MDD$gene2, sep = ":")
+edgesMDD2 <- networkCLR_MDD$concat
+```
+
+## Lemon-Tree
+```{r}
+edgelist_AD <- read.table("Lemon-Tree/EdgeListLT3_AD.csv", sep = ",", header = T)
+head(edgelist_AD)
+edgelist_MDD <- read.table("Lemon-Tree/EdgeListLT3_MDD.csv", sep = ",", header = T)
+head(edgelist_MDD)
+dim(edgelist_AD)
+edgelist_AD$concat <- paste(edgelist_AD$Regulator, edgelist_AD$Target_gene, sep = ":")
+edgesAD3 <- edgelist_AD$concat
+edgelist_MDD$concat <- paste(edgelist_MDD$Regulator, edgelist_MDD$Target_gene, sep = ":")
+edgesMDD3 <- edgelist_MDD$concat
+```
+
+## Save files
+```{r}
+write.table(edgesAD1, file = "edgesAD1.txt", sep = ",", col.names = F, row.names = F, quote = F)
+write.table(edgesAD2, file = "edgesAD2.txt", sep = ",", col.names = F, row.names = F, quote = F)
+write.table(edgesAD3, file = "edgesAD3.txt", sep = ",", col.names = F, row.names = F, quote = F)
+write.table(edgesMDD1, file = "edgesMDD1.txt", sep = ",", col.names = F, row.names = F, quote = F)
+write.table(edgesMDD2, file = "edgesMDD2.txt", sep = ",", col.names = F, row.names = F, quote = F)
+write.table(edgesMDD3, file = "edgesMDD3.txt", sep = ",", col.names = F, row.names = F, quote = F)
+```
+
+# Venn diagram  
+AD
+```{r}
+#install.packages("BioVenn")
+library(BioVenn)
+venn_diag <- draw.venn(edgesAD1, edgesAD2, edgesAD3, title = "Venn diagram of edges", nrtype = "abs", xtitle =
+                         "GENIE3", ytitle = "CLR", ztitle = "  Lemon-Tree", subtitle = "AD", output = "png", 
+                       filename = "VennDiagram100_AD.png", t_s = 5, st_s = 4, xt_s = 4, yt_s = 4, zt_s = 4, 
+                       nr_s = 3, x_c = "salmon", y_c = "seagreen3", z_c = "royalblue1")
+```
+MDD
+```{r}
+venn_diag <- draw.venn(edgesMDD1, edgesMDD2, edgesMDD3, title = "Venn diagram of edges", nrtype = "abs", xtitle =
+                         "  GENIE3", ytitle = "\nCLR", ztitle = "    Lemon-Tree", subtitle = "MDD", output = "png", 
+                       filename = "VennDiagram100_MDD.png", t_s = 5, st_s = 4, xt_s = 4, yt_s = 4, zt_s = 4, 
+                       nr_s = 3, x_c = "salmon", y_c = "seagreen3", z_c = "royalblue1")
+```
+
+# Number of nodes
+Make barplots per disease of number of target genes, number of regulators and total number of nodes
+
+## GENIE3
+put genes into list, take unique elements and number of elements  
+Have selected top 100 000 as there are only so much edges in Lemon-Tree network
+```{r}
+linklistAD <- read.table("LinkList_AD_top.csv", header = T)
+head(linklistAD)
+linklistMDD <- read.table("LinkList_MDD_top.csv", header = T)
+head(linklistMDD)
+#AD
+dim(linklistAD)
+linklistAD <- linklistAD %>% dplyr::slice(c(1:100000))
+regulatoryGeneAD <- linklistAD$regulatoryGene
+head(regulatoryGeneAD)
+regulatoryGeneAD <- unique(regulatoryGeneAD)
+length(regulatoryGeneAD) #994 regulators
+targetGeneAD <- linklistAD$targetGene
+targetGeneAD <- unique(targetGeneAD)
+length(targetGeneAD) #9340 genes 
+nodesAD1 <- c(regulatoryGeneAD, targetGeneAD)
+length(nodesAD1)
+nodesAD1 <- unique(nodesAD1)
+length(nodesAD1) #9384 nodes in total
+#MDD 
+linklistMDD <- linklistMDD %>% slice(c(1:100000))
+regulatoryGeneMDD <- linklistMDD$regulatoryGene
+head(regulatoryGeneMDD)
+regulatoryGeneMDD <- unique(regulatoryGeneMDD)
+length(regulatoryGeneMDD) #1069 regulators
+targetGeneMDD <- linklistMDD$targetGene
+targetGeneMDD <- unique(targetGeneMDD)
+length(targetGeneMDD) #8859 genes 
+nodesMDD1 <- c(regulatoryGeneMDD, targetGeneMDD)
+length(nodesMDD1)
+nodesMDD1 <- unique(nodesMDD1)
+length(nodesMDD1) #8871 nodes in total
+```
+
+## CLR
+```{r}
+networkCLR_AD <- read.table("network_AD_reg.csv", header = T)
+head(networkCLR_AD)
+dim(networkCLR_AD)
+networkCLR_MDD <- read.table("network_MDD_reg.csv", header = T)
+head(networkCLR_MDD)
+#AD
+networkCLR_AD <- networkCLR_AD %>% slice(c(1:100000))
+gene1AD <- networkCLR_AD$gene1
+head(gene1AD)
+gene1AD <- unique(gene1AD)
+length(gene1AD) #1041 regulators
+gene2AD <- networkCLR_AD$gene2
+gene2AD <- unique(gene2AD)
+length(gene2AD) #9714 target genes
+nodesAD2 <- c(gene1AD, gene2AD)
+length(nodesAD2)
+nodesAD2 <- unique(nodesAD2)
+length(nodesAD2) #9715 nodes 
+#MDD
+networkCLR_MDD <- networkCLR_MDD %>% slice(c(1:100000))
+gene1MDD <- networkCLR_MDD$gene1
+head(gene1MDD)
+gene1MDD <- unique(gene1MDD)
+length(gene1MDD) #1101 regulators
+gene2MDD <- networkCLR_MDD$gene2
+gene2MDD <- unique(gene2MDD)
+length(gene2MDD) #9182 target genes
+nodesMDD2 <- c(gene1MDD, gene2MDD)
+length(nodesMDD2)
+nodesMDD2 <- unique(nodesMDD2)
+length(nodesMDD2) #9183 nodes 
+```
+
+## Lemon-Tree
+```{r}
+edgelist_AD <- read.table("Lemon-Tree/EdgeListLT3_AD.csv", sep = ",", header = T)
+head(edgelist_AD)
+dim(edgelist_AD)
+edgelist_MDD <- read.table("Lemon-Tree/EdgeListLT3_MDD.csv", sep = ",", header = T)
+head(edgelist_MDD)
+dim(edgelist_MDD)
+#AD
+RegulatorAD <- edgelist_AD$Regulator
+RegulatorAD <- unique(RegulatorAD)
+length(RegulatorAD) #618 regulators
+Target_gene <- edgelist_AD$Target_gene
+Target_gene <- unique(Target_gene)
+length(Target_gene) #8674 target genes 
+nodesAD3 <- c(RegulatorAD, Target_gene)
+nodesAD3 <- unique(nodesAD3)
+length(nodesAD3) #8736 nodes
+#MDD
+RegulatorMDD <- edgelist_MDD$Regulator
+RegulatorMDD <- unique(RegulatorMDD)
+length(RegulatorMDD) #763 regulators
+Target_geneMDD <- edgelist_MDD$Target_gene
+Target_geneMDD <- unique(Target_geneMDD)
+length(Target_geneMDD) #7934 target genes 
+nodesMDD3 <- c(RegulatorMDD, Target_geneMDD)
+nodesMDD3 <- unique(nodesMDD3)
+length(nodesMDD3) #8012 nodes
+```
+
+## Bar plots
+Number of nodes
+```{r}
+# Nodes in AD
+nodesAD <- data.frame(method = c("GENIE3", "CLR", "Lemon-Tree", "MERLIN-P"),
+                      nodes = c(9384, 9715, 8736, 1))
+head(nodesAD)
+library(tidyverse)
+ggplot(data = nodesAD, aes(x = method, y = nodes)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = nodes), vjust = 1.6, color = "white", size = 3.5) +
+  labs(title = "Number of nodes for AD networks") +
+  theme_minimal()
+
+#nodes in MDD
+nodesMDD <- data.frame(method = c("GENIE3", "CLR", "Lemon-Tree", "MERLIN-P"),
+                       nodes = c(8871, 9183, 8011, 1))
+ggplot(data = nodesMDD, aes(x = method, y = nodes)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = nodes), vjust = 1.6, color = "white", size = 3.5) +
+  labs(title = "Number of nodes for MDD networks") +
+  theme_minimal()
+
+nodes <- data.frame(disease = rep(c("AD", "MDD"), each = 3), 
+                    method = rep(c("GENIE3", "CLR", "Lemon-Tree"), 2),
+                    nodes = c(9384, 9715, 8736, 8871, 9183, 8011))
+head(nodes)
+ggplot(data = nodes, aes(x = method, y = nodes, fill = disease)) +
+  geom_bar(stat = "identity", position=position_dodge()) +
+  geom_text(aes(label = nodes), vjust = 1.6, color = "white", size = 3.5, position = position_dodge(0.9)) +
+  labs(title = "Number of nodes for each method per disease") +
+  scale_fill_manual(values = c("lightcoral", "royalblue")) + #indianred1
+  theme_minimal()
+```
+
+```{r}
+png(filename = "nodes.png")
+ggplot(data = nodes, aes(x = method, y = nodes, fill = disease)) +
+  geom_bar(stat = "identity", position=position_dodge()) +
+  geom_text(aes(label = nodes), vjust = 1.6, color = "white", size = 3.5, position = position_dodge(0.9)) +
+  labs(title = "Number of nodes for each method per disease") +
+  scale_fill_manual(values = c("lightcoral", "royalblue")) +
+  theme_minimal()
+dev.off()
+```
+
+# Hubs in networks
+## GENIE3
+```{r}
+library(tidyverse)
+linklistAD <- read.table("LinkList_AD_top.csv", header = T, sep = ",")
+head(linklistAD)
+tail(linklistAD)
+#linklistAD <- linklistAD %>% dplyr::slice(c(1:100000))
+linklistMDD <- read.table("LinkList_MDD_top.csv", header = T, sep = ",")
+head(linklistMDD)
+#linklistMDD <- linklistMDD %>% slice(c(1:100000))
+```
+
+frequency of nodes
+```{r}
+nodesall_AD1 <- c(linklistAD$regulatoryGene, linklistAD$targetGene)
+head(nodesall_AD1)
+nodesnr_AD <- as.data.frame(table(nodesall_AD1))
+nodesnr_AD <- nodesnr_AD %>% arrange(desc(Freq))
+head(nodesnr_AD)
+```
+Frequency is number of times these nodes are either a regulator or target gene, so number of times it is in an edge
+
+frequency of regulators
+```{r}
+regAD1 <- linklistAD$regulatoryGene 
+regAD1 <- as.data.frame(table(regAD1))
+regAD1 <- regAD1 %>% arrange(desc(Freq))
+head(regAD1)
+regAD1$regAD1 <- as.character(regAD1$regAD1)
+```
+All top nodes are also regulators, so I will only look at the regulators
+
+```{r}
+regMDD1 <- linklistMDD$regulatoryGene 
+regMDD1 <- as.data.frame(table(regMDD1))
+regMDD1 <- regMDD1 %>% arrange(desc(Freq))
+regMDD1$regMDD1 <- as.character(regMDD1$regMDD1)
+head(regMDD1)
+```
+
+## CLR
+```{r}
+networkCLR_AD <- read.table("network_AD_reg.csv", header = T, sep = ",")
+head(networkCLR_AD)
+dim(networkCLR_AD)
+#networkCLR_AD <- networkCLR_AD %>% slice(c(1:100000))
+networkCLR_MDD <- read.table("network_MDD_reg.csv", header = T, sep = ",")
+head(networkCLR_MDD)
+#networkCLR_MDD <- networkCLR_MDD %>% slice(c(1:100000))
+```
+
+Frequency of regulators
+```{r}
+regAD2 <- networkCLR_AD$gene1
+regAD2 <- as.data.frame(table(regAD2))
+regAD2 <- regAD2 %>% arrange(desc(Freq))
+regAD2$regAD2 <- as.character(regAD2$regAD2)
+head(regAD2)
+```
+MDD
+```{r}
+regMDD2 <- networkCLR_MDD$gene1
+regMDD2 <- as.data.frame(table(regMDD2))
+regMDD2 <- regMDD2 %>% arrange(desc(Freq))
+regMDD2$regMDD2 <- as.character(regMDD2$regMDD2)
+head(regMDD2)
+```
+
+## Lemon-Tree
+```{r}
+edgelist_AD <- read.table("Lemon-Tree/EdgeListLT3_AD.csv", sep = ",", header = T)
+head(edgelist_AD)
+edgelist_MDD <- read.table("Lemon-Tree/EdgeListLT3_MDD.csv", sep = ",", header = T)
+head(edgelist_MDD)
+```
+
+```{r}
+regAD3 <- edgelist_AD$Regulator
+regAD3 <- as.data.frame(table(regAD3))
+regAD3 <- regAD3 %>% arrange(desc(Freq))
+regAD3$regAD3 <- as.character(regAD3$regAD3)
+head(regAD3)
+```
+
+```{r}
+regMDD3 <- edgelist_MDD$Regulator
+regMDD3 <- as.data.frame(table(regMDD3))
+regMDD3 <- regMDD3 %>% arrange(desc(Freq))
+regMDD3$regMDD3 <- as.character(regMDD3$regMDD3)
+head(regMDD3)
+```
+MEF2C always returns 
+
+## Venn diagram of top 100 regulators
+```{r}
+regAD1 <- regAD1 %>% slice(c(1:100)) %>% select(regAD1)
+regAD2 <- regAD2 %>% slice(c(1:100)) %>% select(regAD2)
+regAD3 <- regAD3 %>% slice(c(1:100)) %>% select(regAD3)
+regMDD1 <- regMDD1 %>% slice(c(1:100)) %>% select(regMDD1)
+regMDD2 <- regMDD2 %>% slice(c(1:100)) %>% select(regMDD2)
+regMDD3 <- regMDD3 %>% slice(c(1:100)) %>% select(regMDD3)
+head(regAD3)
+regAD1 <- regAD1$regAD1
+regAD2 <- regAD2$regAD2
+regAD3 <- regAD3$regAD3
+regMDD1 <- regMDD1$regMDD1
+regMDD2 <- regMDD2$regMDD2
+regMDD3 <- regMDD3$regMDD3
+```
+
+```{r}
+library(BioVenn)
+venn_diag <- draw.venn(regAD1, regAD2, regAD3, title = "Venn diagram of top 100 regulators", nrtype = "abs", xtitle =
+                         "GENIE3", ytitle = "\n\nCLR", ztitle = "\n\n        Lemon-Tree", subtitle = "AD", output = "png", 
+                       filename = "VennReg_AD.png", t_s = 5, st_s = 4, xt_s = 4, yt_s = 4, zt_s = 4, 
+                       nr_s = 3.5, x_c = "salmon", y_c = "seagreen3", z_c = "royalblue1")
+```
+
+```{r}
+venn_diag <- draw.venn(regMDD1, regMDD2, regMDD3, title = "Venn diagram of top 100 regulators", nrtype = "abs", 
+                       xtitle = "GENIE3", ytitle = "\n\nCLR", ztitle = "\n\n        Lemon-Tree", subtitle = "MDD", 
+                       output = "png", filename = "VennReg_MDD.png", t_s = 5, st_s = 4, xt_s = 4, yt_s = 4, zt_s = 4,
+                       nr_s = 3.5, x_c = "salmon", y_c = "seagreen3", z_c = "royalblue1")
+```
+
+## Shared regulators between AD and MDD
+```{r}
+regAD <- c(regAD1, regAD2, regAD3)
+regAD <- unique(regAD)
+length(regAD)
+regMDD <- c(regMDD1, regMDD2, regMDD3)
+regMDD <- unique(regMDD)
+length(regMDD)
+reg <- NULL
+venn_diag <- draw.venn(reg, regAD, regMDD, title = "Venn diagram of top regulators", nrtype = "abs", 
+                       ytitle = "\n\nAD", ztitle = "\n\n   MDD", subtitle = "", output = "png", 
+                       filename = "VennReg_AD_MDD.png", t_s = 5, st_s = 4, zt_s = 4, yt_s = 4, nr_s = 3.5, 
+                       y_c = "salmon", z_c = "royalblue1")
+```
+62 top regulators in common
+
+```{r}
+common_reg <- Reduce(intersect, list(regAD, regMDD)) 
+common_reg <- sort(common_reg)
+common_reg
+saveRDS(common_reg, "commonreg.rds")
+```
+

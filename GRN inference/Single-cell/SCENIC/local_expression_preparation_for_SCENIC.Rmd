@@ -1,0 +1,55 @@
+---
+title: "Hanne SCENIC"
+author: "Joke Deschildre"
+output: html_document
+date: '2022-05-04'
+---
+
+```{r}
+library(Seurat)
+library(data.table)
+library("SeuratDisk")
+```
+
+```{r}
+counts_AD1 <- fread("/home/joke_d/Documents/Hanne/counts_AD1.txt", data.table = FALSE)
+rownames(counts_AD1) <- counts_AD1[,1]
+counts_AD1[,1] <- NULL 
+counts_AD1
+counts_AD1_Seurat <- CreateSeuratObject(as.matrix(counts_AD1))
+```
+
+```{r}
+table(counts_AD1_Seurat$orig.ident)
+```
+
+
+```{r}
+counts_AD1_Seurat <- FindVariableFeatures(counts_AD1_Seurat)
+```
+
+```{r}
+SaveH5Seurat(counts_AD1_Seurat, filename = "/home/joke_d/Documents/Hanne/counts_AD1.h5Seurat", assays = "RNA")
+Convert("/home/joke_d/Documents/Hanne/counts_AD1.h5Seurat", dest = "h5ad")
+```
+
+```{r}
+counts_MDD <- fread("/home/joke_d/Documents/Hanne/counts_MDD.txt", data.table = FALSE )
+rownames(counts_MDD) <- counts_MDD[,1]
+counts_MDD[,1] <- NULL 
+counts_MDD
+counts_MDD_Seurat <- CreateSeuratObject(as.matrix(counts_MDD))
+```
+
+```{r}
+table(counts_MDD_Seurat$orig.ident)
+counts_MDD_Seurat 
+```
+
+
+```{r}
+SaveH5Seurat(counts_MDD_Seurat, filename = "/home/joke_d/Documents/Hanne/counts_MDD.h5Seurat", assays = "RNA")
+Convert("/home/joke_d/Documents/Hanne/counts_MDD.h5Seurat", dest = "h5ad")
+```
+
+
