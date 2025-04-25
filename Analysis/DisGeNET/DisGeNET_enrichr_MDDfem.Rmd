@@ -1,0 +1,60 @@
+---
+title: "DisGeNET enrichment MDD female dataset"
+author: "Hanne Puype"
+date: "2025-04-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Packages
+```{r}
+library(tidyverse)
+library(enrichR)
+```
+
+# Load datasets
+```{r}
+network_MDD_f <- read.csv("single-cell/MDD_female_finaledges.csv")
+network_MDD_f <- network_MDD_f %>% select(-X)
+network_MDD_f <- network_MDD_f %>% select(TF, target, rank_inverse)
+```
+
+## Enrichment in regulons 
+```{r}
+dbs <- c("DisGeNET")
+```
+
+```{r}
+B_sc <- network_MDD_f %>% group_by(TF) %>% mutate(rid = row_number()) %>% spread(TF, target)
+B_sc <- B_sc %>% select(-rid, -rank_inverse)
+```
+
+```{r}
+modules_OI_MDD_f <- c()
+for (TF in colnames(B_sc)[c(114:length(colnames(B_sc)))]){
+  modIds <- B_sc[TF]
+  modIds <- as_tibble(modIds)
+  names(modIds) <- "GeneSymbol"
+  symbols <- modIds$GeneSymbol
+  enriched <- enrichr(symbols, dbs)
+  enriched <- lapply(enriched, function(x) x <- x %>% filter(Adjusted.P.value <= 0.05))
+  if (dim(as.data.frame(enriched[[1]]) %>% filter(grepl("depr", Term, ignore.case = T)))[1] != 0) {
+      modules_OI_MDD_f <- c(modules_OI_MDD_f, TF)
+}
+  lapply(enriched, function(x) write.table(data.frame(x),
+                                      paste0('single-cell/DisGeNET/EnrichmentMDDfem_',TF,'.txt'),
+                                           append = T, sep='\t', quote = F))
+}
+```
+
+```{r}
+print(modules_OI_MDD_f, quote = F) # CEBPD, FOS, IRF8, MAFF, NFATC2, STAT3
+```
+
+These are not included:
+ALX4    depressed nasal tip
+NR2C1, NR2C2   depressed philtrum
+TCFL5, TEAD1   Depressive symptoms
