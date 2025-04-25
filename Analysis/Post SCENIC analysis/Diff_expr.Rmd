@@ -1,0 +1,136 @@
+---
+title: "Differential expression"
+author: "Hanne Puype"
+date: "2025-03-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(SeuratObject)
+library(Seurat)
+```
+
+## Load data
+```{r}
+seuratObjAD <- readRDS("~/MyFiles/Master/single-cell/Seurat_AD.rds")
+seuratObjMDD <- readRDS("~/MyFiles/Master/single-cell/Seurat_MDD.rds")
+```
+
+## Differential expression
+### AD
+```{r}
+head(seuratObjAD@meta.data)
+seuratObjAD$CT_Diag <- paste(seuratObjAD$celltype, seuratObjAD$Diagnosis, sep = "_")
+Idents(seuratObjAD) <- "CT_Diag"
+```
+
+```{r}
+#diff_exp <- FindAllMarkers(seuratObjAD, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+diff_exp_MG <- FindMarkers(seuratObjAD, ident.1 = "MG_AD", ident.2 = "MG_Control")
+diff_exp_ODC <- FindMarkers(seuratObjAD, ident.1 = "ODC_AD", ident.2 = "ODC_Control")
+diff_exp_OPC <- FindMarkers(seuratObjAD, ident.1 = "OPC_AD", ident.2 = "OPC_Control")
+diff_exp_ASC <- FindMarkers(seuratObjAD, ident.1 = "ASC_AD", ident.2 = "ASC_Control")
+diff_exp_EX <- FindMarkers(seuratObjAD, ident.1 = "EX_AD", ident.2 = "EX_Control")
+diff_exp_INH <- FindMarkers(seuratObjAD, ident.1 = "INH_AD", ident.2 = "INH_Control")
+diff_exp_END <- FindMarkers(seuratObjAD, ident.1 = "PER.END_AD", ident.2 = "PER.END_Control")
+```
+
+```{r}
+diff_exp_MG <- diff_exp_MG %>% filter(p_val_adj < 0.05 &
+                                  abs(avg_log2FC) > 0.25)
+diff_exp_MG
+diff_exp_MG <- diff_exp_MG %>% add_column(celltype = "MG_ADvsMG_C")
+```
+
+```{r}
+diff_exp_ODC <- diff_exp_ODC %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_ODC
+diff_exp_ODC <- diff_exp_ODC %>% add_column(celltype = "ODC_ADvsODC_C")
+
+diff_exp_OPC <- diff_exp_OPC %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_OPC
+diff_exp_OPC <- diff_exp_OPC %>% add_column(celltype = "OPC_ADvsOPC_C")
+
+diff_exp_ASC <- diff_exp_ASC %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_ASC
+diff_exp_ASC <- diff_exp_ASC %>% add_column(celltype = "ASC_ADvsASC_C")
+
+diff_exp_EX <- diff_exp_EX %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_EX
+diff_exp_EX <- diff_exp_EX %>% add_column(celltype = "EX_ADvsEX_C")
+
+diff_exp_INH <- diff_exp_INH %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_INH
+diff_exp_INH <- diff_exp_INH %>% add_column(celltype = "INH_ADvsINH_C")
+
+diff_exp_END <- diff_exp_END %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_END
+diff_exp_END <- diff_exp_END %>% add_column(celltype = "PER.END_ADvsPER.END_C")
+```
+
+```{r}
+diff_exp_AD <- rbind(diff_exp_MG, diff_exp_ODC, diff_exp_OPC, diff_exp_ASC, diff_exp_EX, diff_exp_INH, diff_exp_END)
+```
+
+```{r}
+diff_exp_AD <- rownames_to_column(diff_exp_AD, var = "genes")
+write_csv(diff_exp_AD, file = "diff_exp_celltypes_ADvsC.csv", quote = "none")
+```
+
+
+### MDD
+```{r}
+head(seuratObjMDD@meta.data)
+seuratObjMDD$CT_Diag <- paste(seuratObjMDD$Celltype, seuratObjMDD$Diagnosis, sep = "_")
+Idents(seuratObjMDD) <- "CT_Diag"
+```
+
+```{r}
+#diff_exp_MDD <- FindAllMarkers(seuratObjMDD, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+diff_exp_MG <- FindMarkers(seuratObjMDD, ident.1 = "MICRO_Suicide", ident.2 = "MICRO_Control")
+diff_exp_ODC <- FindMarkers(seuratObjMDD, ident.1 = "ODC_Suicide", ident.2 = "ODC_Control")
+diff_exp_OPC <- FindMarkers(seuratObjMDD, ident.1 = "OPC_Suicide", ident.2 = "OPC_Control")
+diff_exp_ASC <- FindMarkers(seuratObjMDD, ident.1 = "ASC_Suicide", ident.2 = "ASC_Control")
+diff_exp_EX <- FindMarkers(seuratObjMDD, ident.1 = "EX_Suicide", ident.2 = "EX_Control")
+diff_exp_INH <- FindMarkers(seuratObjMDD, ident.1 = "INH_Suicide", ident.2 = "INH_Control")
+diff_exp_END <- FindMarkers(seuratObjMDD, ident.1 = "END_Suicide", ident.2 = "END_Control")
+```
+
+```{r}
+diff_exp_MG <- diff_exp_MG %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_MG <- diff_exp_MG %>% add_column(celltype = "MICRO_SuicidevsMICRO_Control")
+
+diff_exp_ODC <- diff_exp_ODC %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_ODC <- diff_exp_ODC %>% add_column(celltype = "ODC_SuicidevsODC_Control")
+
+diff_exp_OPC <- diff_exp_OPC %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_OPC <- diff_exp_OPC %>% add_column(celltype = "OPC_SuicidevsOPC_Control")
+
+diff_exp_ASC <- diff_exp_ASC %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_ASC <- diff_exp_ASC %>% add_column(celltype = "ASC_SuicidevsASC_Control")
+
+diff_exp_EX <- diff_exp_EX %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_EX <- diff_exp_EX %>% add_column(celltype = "EX_SuicidevsEX_Control")
+
+diff_exp_INH <- diff_exp_INH %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_INH <- diff_exp_INH %>% add_column(celltype = "INH_SuicidevsINH_Control")
+
+diff_exp_END <- diff_exp_END %>% filter(p_val_adj < 0.05 & abs(avg_log2FC) > 0.25)
+diff_exp_END <- diff_exp_END %>% add_column(celltype = "END_SuicidevsEND_Control")
+```
+
+```{r}
+diff_exp_MDD <- rbind(diff_exp_MG, diff_exp_ODC, diff_exp_OPC, diff_exp_ASC, diff_exp_EX, diff_exp_INH, diff_exp_END)
+diff_exp_MDD
+```
+
+```{r}
+diff_exp_MDD <- rownames_to_column(diff_exp_MDD, "genes")
+write_csv(diff_exp_MDD, file = "diff_exp_celltypes_MDDvsC.csv", quote = "none")
+```
+

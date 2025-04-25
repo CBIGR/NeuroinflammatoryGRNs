@@ -1,0 +1,467 @@
+---
+title: "GSEA original modules"
+author: "Hanne Puype"
+date: "2025-04-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+```{r warning=FALSE, message=FALSE}}
+library(tidyverse)
+library(clusterProfiler)
+library(fgsea)
+library(WGCNA)
+library(org.Hs.eg.db)
+```
+
+# GSEA analysis per module: rank genes based on coexpression with module eigengene 
+## AD
+### Load data
+```{r}
+modulesAD <- read.table("kmed_modules_AD.txt", header = F)
+names(modulesAD) <- c("gene", "module")
+```
+
+```{r}
+counts_AD <- read.table("Processed_counts_AD_GS.txt", header = T)
+counts_AD <- column_to_rownames(counts_AD, var = "GeneSymbol")
+```
+
+Prepare input data in right formats
+```{r}
+counts_AD <- counts_AD %>% filter(rownames(counts_AD) %in% modulesAD$gene)
+```
+
+```{r}
+modulesAD_vec <- modulesAD$module
+names(modulesAD_vec) <- modulesAD$gene
+head(modulesAD_vec)
+```
+
+Calculate eigengenes of modules 
+```{r}
+MEs0_AD <- moduleEigengenes(t(counts_AD), modulesAD_vec)$eigengenes 
+```
+
+
+Select eigengenes of interest
+```{r}
+eigengene_AD_22 <- MEs0_AD[,"ME22"]
+eigengene_AD_39 <- MEs0_AD[,"ME39"]
+eigengene_AD_51 <- MEs0_AD[,"ME51"]
+eigengene_AD_153 <- MEs0_AD[,"ME153"]
+
+names(eigengene_AD_22) <- rownames(MEs0_AD)
+names(eigengene_AD_39) <- rownames(MEs0_AD)
+names(eigengene_AD_51) <- rownames(MEs0_AD)
+names(eigengene_AD_153) <- rownames(MEs0_AD)
+```
+
+```{r}
+set.seed(123)
+organism <- 'org.Hs.eg.db' 
+```
+
+Calculate correlation of each gene with the eigengene  
+```{r}
+ranked_genes_by_cluster_AD <- list()
+for (eigengene in c(22, 39, 51, 153)){
+   # Calculate correlation of each gene with the eigengene
+  correlations <- cor(t(counts_AD), get(paste0("eigengene_AD_", eigengene)), use = "pairwise.complete.obs")
+  ranked_genes <- as.vector(correlations)
+  names(ranked_genes) <- rownames(correlations)
+  # Rank genes by correlation
+  ranked_genes <- sort(ranked_genes, decreasing = TRUE)
+  # Store ranked genes in the list
+  ranked_genes_by_cluster_AD[[eigengene]] <- ranked_genes
+}
+head(ranked_genes_by_cluster_AD[[22]])
+```
+
+Module 22
+KEGG
+```{r fig.height=8}
+# Convert gene symbols to Entrez IDs
+entrez_ids <- mapIds(org.Hs.eg.db, keys = names(ranked_genes_by_cluster_AD[[22]]), column = "ENTREZID", 
+                     keytype = "SYMBOL")
+names(ranked_genes_by_cluster_AD[[22]]) <- entrez_ids
+ranked_genes_by_cluster_AD[[22]] <- ranked_genes_by_cluster_AD[[22]][!(is.na(names(ranked_genes_by_cluster_AD[[22]])))]
+```
+
+```{r}
+kk2 <- gseKEGG(geneList     = ranked_genes_by_cluster_AD[[22]],
+               organism     = 'hsa',
+               minGSSize    = 10, 
+               pvalueCutoff = 0.05,
+               verbose      = FALSE)
+dotplot(kk2, showCategory=10, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+ggsave("GSEA_AD_22_KEGG.pdf", device = "pdf", width = 8, height = 10)
+```
+
+```{r}
+head(kk2, 20)
+gseaplot(kk2, geneSetID = "hsa05010", by = "runningScore", title = kk2$Description[8])
+ggsave("GSEA_AD_22_KEGG_scoreplot.pdf", device = "pdf", width = 10, height = 6)
+gseaplot(kk2, geneSetID = "hsa05010", by = "preranked", title = kk2$Description[8])
+gseaplot(kk2, geneSetID = "hsa05010", title = kk2$Description[8])
+```
+
+Disease Ontology
+```{r fig.height=10}
+library(DOSE)
+gse_DO <- gseDO(geneList      = ranked_genes_by_cluster_AD[[22]],
+                minGSSize     = 10,
+                pvalueCutoff  = 0.05,
+                pAdjustMethod = "BH",
+                organism      = 'hsa',
+                verbose       = FALSE)
+head(gse_DO, 20)
+dotplot(gse_DO, showCategory=15, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+```
+
+```{r}
+gseaplot(gse_DO, geneSetID = "DOID:10652", by = "runningScore", title = gse_DO$Description[10])
+ggsave("GSEA_AD_22_DO_scoreplot.pdf", device = "pdf", width = 10, height = 6)
+```
+
+
+Module 39 
+KEGG
+```{r fig.height=8}
+# Convert gene symbols to Entrez IDs
+entrez_ids <- mapIds(org.Hs.eg.db, keys = names(ranked_genes_by_cluster_AD[[39]]), column = "ENTREZID", 
+                     keytype = "SYMBOL")
+names(ranked_genes_by_cluster_AD[[39]]) <- entrez_ids
+ranked_genes_by_cluster_AD[[39]] <- ranked_genes_by_cluster_AD[[39]][!(is.na(names(ranked_genes_by_cluster_AD[[39]])))]
+
+kk2 <- gseKEGG(geneList     = ranked_genes_by_cluster_AD[[39]],
+               organism     = 'hsa',
+               minGSSize    = 10, 
+               pvalueCutoff = 0.05,
+               verbose      = FALSE,
+               eps = 0)
+dotplot(kk2, showCategory=10, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+ggsave("GSEA_AD_39_KEGG.pdf", device = "pdf", width = 8, height = 10)
+```
+
+```{r}
+head(kk2, 20)
+gseaplot(kk2, geneSetID = "hsa05010", by = "runningScore", title = kk2$Description[6])
+ggsave("GSEA_AD_39_KEGG_scoreplot.pdf", device = "pdf", width = 10, height = 6)
+```
+
+DO
+```{r fig.height=10}
+gse_DO <- gseDO(geneList      = ranked_genes_by_cluster_AD[[39]],
+                minGSSize     = 10,
+                pvalueCutoff  = 0.05,
+                pAdjustMethod = "BH",
+                organism      = 'hsa',
+                verbose       = FALSE,
+                eps = 0)
+head(gse_DO, 20)
+dotplot(gse_DO, showCategory=16, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+```
+
+```{r}
+gseaplot(gse_DO, geneSetID = "DOID:10652", by = "runningScore", title = gse_DO$Description[11])
+ggsave("GSEA_AD_39_DO_scoreplot.pdf", device = "pdf", width = 10, height = 6)
+```
+
+Module 51
+KEGG
+```{r fig.height=8}
+# Convert gene symbols to Entrez IDs
+entrez_ids <- mapIds(org.Hs.eg.db, keys = names(ranked_genes_by_cluster_AD[[51]]), column = "ENTREZID", 
+                     keytype = "SYMBOL")
+names(ranked_genes_by_cluster_AD[[51]]) <- entrez_ids
+ranked_genes_by_cluster_AD[[51]] <- ranked_genes_by_cluster_AD[[51]][!(is.na(names(ranked_genes_by_cluster_AD[[51]])))]
+
+kk2 <- gseKEGG(geneList     = ranked_genes_by_cluster_AD[[51]],
+               organism     = 'hsa',
+               minGSSize    = 10, 
+               pvalueCutoff = 0.05,
+               verbose      = FALSE,
+               eps = 0)
+dotplot(kk2, showCategory=10, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+ggsave("GSEA_AD_51_KEGG.pdf", device = "pdf", width = 8, height = 10)
+```
+
+```{r}
+head(kk2, 20)
+gseaplot(kk2, geneSetID = "hsa05010", by = "runningScore", title = kk2$Description[6])
+ggsave("GSEA_AD_51_KEGG_scoreplot.pdf", device = "pdf", width = 10, height = 6)
+```
+
+DO
+```{r fig.height=10}
+gse_DO <- gseDO(geneList      = ranked_genes_by_cluster_AD[[51]],
+                minGSSize     = 10,
+                pvalueCutoff  = 0.05,
+                pAdjustMethod = "BH",
+                organism      = 'hsa',
+                verbose       = FALSE)
+head(gse_DO, 20)
+dotplot(gse_DO, showCategory=15, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+```
+
+```{r}
+gseaplot(gse_DO, geneSetID = "DOID:10652", by = "runningScore", title = gse_DO$Description[12])
+ggsave("GSEA_AD_51_DO_scoreplot.pdf", device = "pdf", width = 10, height = 6)
+```
+
+Module 153
+
+KEGG
+```{r fig.height=8}
+# Convert gene symbols to Entrez IDs
+entrez_ids <- mapIds(org.Hs.eg.db, keys = names(ranked_genes_by_cluster_AD[[153]]), column = "ENTREZID", 
+                     keytype = "SYMBOL")
+names(ranked_genes_by_cluster_AD[[153]]) <- entrez_ids
+ranked_genes_by_cluster_AD[[153]] <- ranked_genes_by_cluster_AD[[153]][!(is.na(names(ranked_genes_by_cluster_AD[[153]])))]
+
+kk2 <- gseKEGG(geneList     = ranked_genes_by_cluster_AD[[153]],
+               organism     = 'hsa',
+               minGSSize    = 10, 
+               pvalueCutoff = 0.05,
+               verbose      = FALSE,
+               eps = 0)
+dotplot(kk2, showCategory=10, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+ggsave("GSEA_AD_153_KEGG.pdf", device = "pdf", width = 8, height = 10)
+```
+
+```{r}
+head(kk2, 20)
+gseaplot(kk2, geneSetID = "hsa05010", by = "runningScore", title = kk2$Description[6])
+ggsave("GSEA_AD_153_KEGG_scoreplot.pdf", device = "pdf", width = 10, height = 6)
+```
+
+DO
+```{r fig.height=10}
+gse_DO <- gseDO(geneList      = ranked_genes_by_cluster_AD[[153]],
+                minGSSize     = 10,
+                pvalueCutoff  = 0.05,
+                pAdjustMethod = "BH",
+                organism      = 'hsa',
+                verbose       = FALSE)
+head(gse_DO, 20)
+dotplot(gse_DO, showCategory=15, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+```
+
+```{r}
+gseaplot(gse_DO, geneSetID = "DOID:10652", by = "runningScore", title = gse_DO$Description[10])
+ggsave("GSEA_AD_153_DO_scoreplot.pdf", device = "pdf", width = 10, height = 6)
+```
+
+## MDD 
+### Load data
+```{r}
+modulesMDD <- read.table("kmed_modules_MDD.txt", header = F)
+names(modulesMDD) <- c("gene", "module")
+```
+
+```{r}
+counts_MDD <- read.table("Processed_counts_MDD_GS.txt", header = T)
+counts_MDD <- column_to_rownames(counts_MDD, var = "GeneSymbol")
+```
+
+Prepare input data in right formats
+```{r}
+counts_MDD <- counts_MDD %>% filter(rownames(counts_MDD) %in% modulesMDD$gene)
+```
+
+```{r}
+modulesMDD_vec <- modulesMDD$module
+names(modulesMDD_vec) <- modulesMDD$gene
+head(modulesMDD_vec)
+```
+
+Calculate eigengenes
+```{r}
+MEs0_MDD <- moduleEigengenes(t(counts_MDD), modulesMDD_vec)$eigengenes 
+```
+
+Select eigengenes of interest
+```{r}
+eigengene_MDD_24 <- MEs0_MDD[,"ME24"]
+eigengene_MDD_36 <- MEs0_MDD[,"ME36"]
+eigengene_MDD_110 <- MEs0_MDD[,"ME110"]
+eigengene_MDD_115 <- MEs0_MDD[,"ME115"]
+
+names(eigengene_MDD_24) <- rownames(MEs0_MDD)
+names(eigengene_MDD_36) <- rownames(MEs0_MDD)
+names(eigengene_MDD_110) <- rownames(MEs0_MDD)
+names(eigengene_MDD_115) <- rownames(MEs0_MDD)
+```
+
+Calculate correlation
+```{r}
+ranked_genes_by_cluster_MDD <- list()
+for (eigengene in c(24, 36, 110, 115)){
+   # Calculate correlation of each gene with the eigengene
+  correlations <- cor(t(counts_MDD), get(paste0("eigengene_MDD_", eigengene)), use = "pairwise.complete.obs")
+  ranked_genes <- as.vector(correlations)
+  names(ranked_genes) <- rownames(correlations)
+  # Rank genes by correlation
+  ranked_genes <- sort(ranked_genes, decreasing = TRUE)
+  # Store ranked genes in the list
+  ranked_genes_by_cluster_MDD[[eigengene]] <- ranked_genes
+}
+head(ranked_genes_by_cluster_MDD[[24]])
+```
+
+Module 24  
+KEGG
+```{r fig.height=8}
+# Convert gene symbols to Entrez IDs
+entrez_ids <- mapIds(org.Hs.eg.db, keys = names(ranked_genes_by_cluster_MDD[[24]]), column = "ENTREZID", 
+                     keytype = "SYMBOL")
+names(ranked_genes_by_cluster_MDD[[24]]) <- entrez_ids
+ranked_genes_by_cluster_MDD[[24]] <- ranked_genes_by_cluster_MDD[[24]][!(is.na(names(ranked_genes_by_cluster_MDD[[24]])))]
+
+kk2 <- gseKEGG(geneList     = ranked_genes_by_cluster_MDD[[24]],
+               organism     = 'hsa',
+               minGSSize    = 10, 
+               pvalueCutoff = 0.05,
+               verbose      = FALSE)
+dotplot(kk2, showCategory=10, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+ggsave("GSEA_MDD_24_KEGG.pdf", device = "pdf", width = 8, height = 10)
+```
+
+```{r}
+head(kk2, 30)
+```
+
+```{r fig.height=10}
+library(DOSE)
+gse_DO <- gseDO(geneList      = ranked_genes_by_cluster_MDD[[24]],
+                minGSSize     = 10,
+                pvalueCutoff  = 0.05,
+                pAdjustMethod = "BH",
+                organism      = 'hsa',
+                verbose       = FALSE)
+head(gse_DO, 30)
+dotplot(gse_DO, showCategory=15, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+```
+
+Module 36  
+
+KEGG
+```{r fig.height=8}
+# Convert gene symbols to Entrez IDs
+entrez_ids <- mapIds(org.Hs.eg.db, keys = names(ranked_genes_by_cluster_MDD[[36]]), column = "ENTREZID", 
+                     keytype = "SYMBOL")
+names(ranked_genes_by_cluster_MDD[[36]]) <- entrez_ids
+ranked_genes_by_cluster_MDD[[36]] <- ranked_genes_by_cluster_MDD[[36]][!(is.na(names(ranked_genes_by_cluster_MDD[[36]])))]
+
+kk2 <- gseKEGG(geneList     = ranked_genes_by_cluster_MDD[[36]],
+               organism     = 'hsa',
+               minGSSize    = 10, 
+               pvalueCutoff = 0.05,
+               verbose      = FALSE)
+dotplot(kk2, showCategory=10, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+ggsave("GSEA_MDD_36_KEGG.pdf", device = "pdf", width = 8, height = 10)
+```
+
+```{r}
+head(kk2, 30)
+```
+
+DO
+```{r fig.height=10}
+gse_DO <- gseDO(geneList      = ranked_genes_by_cluster_MDD[[36]],
+                minGSSize     = 10,
+                pvalueCutoff  = 0.05,
+                pAdjustMethod = "BH",
+                organism      = 'hsa',
+                verbose       = FALSE)
+head(gse_DO, 30)
+dotplot(gse_DO, showCategory=16, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+```
+
+```{r}
+gseaplot(gse_DO, geneSetID = "DOID:0060037", by = "runningScore", title = gse_DO$Description[4])
+ggsave("GSEA_MDD_36_DO_scoreplot.pdf", device = "pdf", width = 10, height = 6)
+```
+
+Module 110  
+KEGG  
+```{r fig.height=8}
+# Convert gene symbols to Entrez IDs
+entrez_ids <- mapIds(org.Hs.eg.db, keys = names(ranked_genes_by_cluster_MDD[[110]]), column = "ENTREZID", 
+                     keytype = "SYMBOL")
+names(ranked_genes_by_cluster_MDD[[110]]) <- entrez_ids
+ranked_genes_by_cluster_MDD[[110]] <- ranked_genes_by_cluster_MDD[[110]][!(is.na(names(ranked_genes_by_cluster_MDD[[110]])))]
+
+kk2 <- gseKEGG(geneList     = ranked_genes_by_cluster_MDD[[110]],
+               organism     = 'hsa',
+               minGSSize    = 10, 
+               pvalueCutoff = 0.05,
+               verbose      = FALSE)
+dotplot(kk2, showCategory=10, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+ggsave("GSEA_MDD_110_KEGG.pdf", device = "pdf", width = 8, height = 10)
+```
+
+```{r}
+head(kk2, 20)
+```
+
+DO
+```{r fig.height=10}
+gse_DO <- gseDO(geneList      = ranked_genes_by_cluster_MDD[[110]],
+                minGSSize     = 10,
+                pvalueCutoff  = 0.05,
+                pAdjustMethod = "BH",
+                organism      = 'hsa',
+                verbose       = FALSE)
+head(gse_DO, 30)
+dotplot(gse_DO, showCategory=16, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+```
+
+```{r}
+gseaplot(gse_DO, geneSetID = "DOID:0060037", by = "runningScore", title = gse_DO$Description[22])
+ggsave("GSEA_MDD_110_DO_scoreplot.pdf", device = "pdf", width = 10, height = 6)
+```
+
+Module 115  
+KEGG 
+```{r fig.height=8}
+# Convert gene symbols to Entrez IDs
+entrez_ids <- mapIds(org.Hs.eg.db, keys = names(ranked_genes_by_cluster_MDD[[115]]), column = "ENTREZID", 
+                     keytype = "SYMBOL")
+names(ranked_genes_by_cluster_MDD[[115]]) <- entrez_ids
+ranked_genes_by_cluster_MDD[[115]] <- ranked_genes_by_cluster_MDD[[115]][!(is.na(names(ranked_genes_by_cluster_MDD[[115]])))]
+
+kk2 <- gseKEGG(geneList     = ranked_genes_by_cluster_MDD[[115]],
+               organism     = 'hsa',
+               minGSSize    = 10, 
+               pvalueCutoff = 0.05,
+               verbose      = FALSE)
+dotplot(kk2, showCategory=10, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+ggsave("GSEA_MDD_115_KEGG.pdf", device = "pdf", width = 8, height = 10)
+```
+
+```{r}
+head(kk2, 30)
+```
+
+DO
+```{r fig.height=10}
+gse_DO <- gseDO(geneList      = ranked_genes_by_cluster_MDD[[115]],
+                minGSSize     = 10,
+                pvalueCutoff  = 0.05,
+                pAdjustMethod = "BH",
+                organism      = 'hsa',
+                verbose       = FALSE)
+head(gse_DO, 30)
+dotplot(gse_DO, showCategory=15, split=".sign") + facet_grid(.~.sign) + theme(axis.text.y = element_text(size=10))
+```
+
+```{r}
+gseaplot(gse_DO, geneSetID = "DOID:0060037", by = "runningScore", title = gse_DO$Description[8])
+ggsave("GSEA_MDD_115_DO_scoreplot.pdf", device = "pdf", width = 10, height = 6)
+```
+

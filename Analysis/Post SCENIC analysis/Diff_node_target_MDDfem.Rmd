@@ -1,0 +1,343 @@
+---
+title: "Differential node targeting MDD female dataset"
+author: "Hanne Puype"
+date: "2025-04-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Load files
+Need to compare two things - so here also AD vs MDD 
+```{r}
+library(tidyverse)
+edgelist_AD <- read.csv("edgelist_sc_AD.csv")
+edgelist_MDD <- read.csv("MDD_female_finaledges.csv")
+edgelist_MDD <- edgelist_MDD %>% dplyr::select(-X)
+```
+
+# Select common nodes
+
+```{r}
+TF_AD <- unique(edgelist_AD$regulator)
+length(TF_AD)
+TF_MDD <- unique(edgelist_MDD$TF)
+length(TF_MDD)
+TFs <- intersect(TF_AD, TF_MDD)
+length(TFs) # 234
+```
+
+```{r}
+TG_AD <- unique(edgelist_AD$gene)
+length(TG_AD)
+TG_MDD <- unique(edgelist_MDD$target)
+length(TG_MDD)
+TGs <- intersect(TG_AD, TG_MDD)
+length(TGs) # 4324
+```
+
+```{r}
+edgelist_AD <- edgelist_AD %>% dplyr::filter(regulator %in% TFs)
+edgelist_MDD <- edgelist_MDD %>% dplyr::filter(TF %in% TFs)
+edgelist_AD <- edgelist_AD %>% dplyr::filter(gene %in% TGs)
+dim(edgelist_AD)
+edgelist_MDD <- edgelist_MDD %>% dplyr::filter(target %in% TGs)
+dim(edgelist_MDD)
+```
+
+# Format for comparison
+```{r}
+edgelist_AD <- edgelist_AD %>% dplyr::rename(TF = regulator, target = gene)
+edgelist_AD <- edgelist_AD %>% unite("concat", TF:target, sep = ":", remove = F)
+edgelist_MDD <- edgelist_MDD %>% unite("concat", TF:target, sep = ":", remove = F)
+edgelist_MDD <- edgelist_MDD %>% dplyr::select(concat, TF, target, regulation) %>% 
+  dplyr::rename(value = regulation)
+```
+
+```{r}
+edgelist_full <- full_join(edgelist_AD, edgelist_MDD, by = c("concat"))
+colnames(edgelist_full)[names(edgelist_full) == "value.x"] <- "AD"
+colnames(edgelist_full)[names(edgelist_full) == "value.y"] <- "MDD"
+edgelist_full <- edgelist_full %>% dplyr::filter(AD == 1 | MDD == 1)
+edgelist_full <- edgelist_full %>% dplyr::select(concat, AD, MDD)
+```
+
+# Comparison
+
+```{r}
+head(edgelist_full)
+edgelist_full <- edgelist_full %>% mutate(Dif = case_when(AD == MDD ~ F,
+                                                    T ~ T))
+edgelist_full %>% group_by(Dif) %>% summarise(n())
+edgelist_dif <- edgelist_full %>% dplyr::filter(Dif == T)
+head(edgelist_dif)
+table(edgelist_dif$AD) # 16181
+table(edgelist_dif$MDD) # 18697
+```
+
+# Back to genes and TFs
+
+```{r}
+edgelist_dif[, c("TF", "gene")] <- edgelist_dif$concat %>% str_split_fixed(":", 2)
+edgelist_dif <- edgelist_dif %>% dplyr::select(TF, gene, AD, MDD)
+#edgelist_dif %>% group_by(gene) %>% summarise(n()) # 4268 unique genes
+edgelist_dif %>% group_by(TF) %>% summarise(n()) # 234 unique TFs
+```
+
+```{r}
+edgelist_full[, c("TF", "gene")] <- edgelist_full$concat %>% str_split_fixed(":", 2)
+```
+
+# More than 20% of edges differential
+
+```{r}
+diff_genes <- c()
+for (genes in unique(edgelist_dif$gene)) {
+  edgelist3 <- edgelist_full %>% dplyr::filter(gene == genes)
+  a <- dim(edgelist3)
+  a <- a[1]
+  edgelist_diff <- edgelist_dif %>% dplyr::filter(gene == genes)
+  b <- dim(edgelist_diff)
+  b <- b[1]
+  perc <- b/a
+  if (perc > 0.20) {
+    if (a > 5 & b > 1) { # more than 5 edges in the networks and more than 1 diff
+      diff_genes <- append(diff_genes, genes)
+    }
+  }
+}
+# number of total edges of gene
+# number of total different edges
+# percentage of b/a
+# save in vector which genes have percentage > 0.20
+```
+
+```{r}
+diff_genes <- unique(diff_genes)
+length(diff_genes) # 3121
+write.table(diff_genes, file = "Differential_edge_analysis/All_diff_genes_ADvsMDDfem.txt", sep = "\t", 
+            row.names = F, quote = F, col.names = T)
+```
+
+Let's see for the TFs
+
+```{r}
+diff_TFs <- c()
+for (TFs in unique(edgelist_dif$TF)) {
+  edgelist3 <- edgelist_full %>% dplyr::filter(TF == TFs)
+  a <- dim(edgelist3)
+  a <- a[1]
+  edgelist_diff <- edgelist_dif %>% dplyr::filter(TF == TFs)
+  b <- dim(edgelist_diff)
+  b <- b[1]
+  perc <- b/a
+  if (perc > 0.20) {
+    if (a > 5) { # more than 5 edges in the networks
+      diff_TFs <- append(diff_TFs, TFs)
+    }
+  }
+}
+diff_TFs <- unique(diff_TFs)
+length(diff_TFs) # 233
+write.table(diff_TFs, file = "Differential_edge_analysis/All_diff_TFs_ADvsMDDfem.txt", sep = "\t", 
+            row.names = F, quote = F, col.names = T)
+```
+
+# Active in AD vs MDD
+```{r}
+diff_AD_genes <- c()
+diff_MDD_genes <- c()
+diff_genes_neither <- c()
+edgelist_dif <- edgelist_dif %>% dplyr::filter(gene %in% diff_genes)
+for (genes in unique(edgelist_dif$gene)) {
+  edgelist_diff <- edgelist_dif %>% dplyr::filter(gene == genes)
+  a <- dim(edgelist_diff)[1]
+  edgelist_diff <- edgelist_diff %>% dplyr::filter(AD == 1)
+  b <- dim(edgelist_diff)[1]
+  perc <- b/a
+  if (perc > 0.9) {
+    diff_AD_genes <- append(diff_AD_genes, genes)
+  }
+  else if (perc < 0.1) {
+    diff_MDD_genes <- append(diff_MDD_genes, genes)
+  }
+  else {
+    diff_genes_neither <- append(diff_genes_neither, genes)
+  }
+}
+# number of differential edges for gene
+# number of edges active in AD 
+# b/a
+# if > 0.9 --> AD-specific
+# if < 0.1 --> MDD-specific
+# else none 
+```
+
+```{r}
+length(diff_AD_genes) # 149
+length(diff_MDD_genes) # 193
+length(diff_genes_neither) # 2779
+```
+
+TFs 
+
+```{r}
+diff_AD_TFs <- c()
+diff_MDD_TFs <- c()
+diff_TFs_neither <- c()
+for (TFs in unique(edgelist_dif$TF)) {
+  edgelist_diff <- edgelist_dif %>% dplyr::filter(TF == TFs)
+  a <- dim(edgelist_diff)[1]
+  edgelist_diff <- edgelist_diff %>% dplyr::filter(AD == 1)
+  b <- dim(edgelist_diff)[1]
+  perc <- b/a
+  if (perc > 0.9) {
+    diff_AD_TFs <- append(diff_AD_TFs, TFs)
+  }
+  else if (perc < 0.1) {
+    diff_MDD_TFs <- append(diff_MDD_TFs, TFs)
+  }
+  else {
+    diff_TFs_neither <- append(diff_TFs_neither, TFs)
+  }
+}
+length(diff_AD_TFs) # 24
+length(diff_MDD_TFs) # 19
+length(diff_TFs_neither) # 191
+```
+
+```{r}
+diff_AD_TFs # IKZF1, NFATC2, SPI1
+diff_MDD_TFs  
+```
+
+# Save files
+
+```{r}
+write.table(diff_AD_genes, "Differential_edge_analysis/ADvsMDDfem/diff_AD_genes_90.txt", sep = "\t", 
+            quote = F, row.names = F, col.names = T)
+write.table(diff_MDD_genes, "Differential_edge_analysis/ADvsMDDfem/diff_MDD_genes_90.txt", sep = "\t", 
+            quote = F, row.names = F, col.names = T)
+write.table(diff_genes_neither, "Differential_edge_analysis/ADvsMDDfem/diff_genes_noADMDD_90.txt", sep = "\t", 
+            quote = F, row.names = F, col.names = T)
+write.table(diff_AD_TFs, "Differential_edge_analysis/ADvsMDDfem/diff_AD_TFs_90.txt", sep = "\t", 
+            quote = F, row.names = F, col.names = T)
+write.table(diff_MDD_TFs, "Differential_edge_analysis/ADvsMDDfem/diff_MDD_TFs_90.txt", sep = "\t", 
+            quote = F, row.names = F, col.names = T)
+write.table(diff_TFs_neither, "Differential_edge_analysis/ADvsMDDfem/diff_TFs_noADMDD_90.txt", sep = "\t", 
+            quote = F, row.names = F, col.names = T)
+```
+
+# Functional enrichment analysis
+
+## All differential edges genes
+
+```{r}
+library(enrichR)
+dbs <- c("GO_Biological_Process_2021", "GO_Molecular_Function_2021", "KEGG_2021_Human", 
+         "Reactome_2016", "WikiPathway_2021_Human")
+enriched1 <- enrichr(diff_genes, dbs)
+enriched1 <- lapply(enriched1, function(x) x <- x %>% dplyr::filter(Adjusted.P.value <= 0.05))
+plotEnrich(enriched1[[1]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "GO Biological Process all genes with differential edges")
+plotEnrich(enriched1[[2]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "GO Molecular Function all genes with differential edges")
+plotEnrich(enriched1[[3]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "KEGG all genes with differential edges")
+plotEnrich(enriched1[[4]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "Reactome all genes with differential edges")
+plotEnrich(enriched1[[5]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "Wikipathways all genes with differential edges")
+lapply(enriched1, function(x) write.table(data.frame(x), 'FunctionalEnrich_diff_edges/ADvsMDDfem/All_diff.txt',
+                                           append = T, sep='\t', quote = F))
+```
+
+## AD-biased genes
+```{r}
+enriched_AD <- enrichr(diff_AD_genes, dbs)
+enriched_AD <- lapply(enriched_AD, function(x) x <- x %>% dplyr::filter(Adjusted.P.value <= 0.05))
+lapply(enriched_AD, function(x) write.table(data.frame(x), 'FunctionalEnrich_diff_edges/ADvsMDDfem/AD_biased.txt',
+                                           append = T, sep='\t', quote = F))
+```
+
+```{r}
+enriched_AD[["GO_Biological_Process_2021"]][["Term"]] <- gsub("\\(.*","",
+                                                              enriched_AD[["GO_Biological_Process_2021"]][["Term"]])
+enriched_AD[["GO_Molecular_Function_2021"]][["Term"]] <- gsub("\\(.*","",
+                                                              enriched_AD[["GO_Molecular_Function_2021"]][["Term"]])
+enriched_AD[[4]][["Term"]] <- gsub(" R-HSA-.*", "", enriched_AD[[4]][["Term"]])
+enriched_AD[[4]][["Term"]] <- gsub(" Homo sapiens", "", enriched_AD[[4]][["Term"]])
+enriched_AD[[5]][["Term"]] <- gsub(" WP.*", "", enriched_AD[[5]][["Term"]])
+
+enriched_AD[[1]][["P.value"]] <- enriched_AD[[1]][["Adjusted.P.value"]]
+enriched_AD[[2]][["P.value"]] <- enriched_AD[[2]][["Adjusted.P.value"]]
+enriched_AD[[3]][["P.value"]] <- enriched_AD[[3]][["Adjusted.P.value"]]
+enriched_AD[[4]][["P.value"]] <- enriched_AD[[4]][["Adjusted.P.value"]]
+enriched_AD[[5]][["P.value"]] <- enriched_AD[[5]][["Adjusted.P.value"]]
+```
+
+```{r fig.width=10}
+plotEnrich(enriched_AD[[1]], showTerms = 20, numChar = 80, y = "Count", orderBy = "Adjusted.P.value", 
+           title = "GO BP \n AD biased genes") + 
+  theme(text=element_text(size = 20)) +
+  scale_fill_gradient(low = '#FFAABB', high = '#99DDFF') 
+ggsave("FunctionalEnrich_diff_edges/ADvsMDDfem/GO_BP_difftarget_AD.pdf", height = 6, width = 11, device = "pdf")
+
+plotEnrich(enriched_AD[[3]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "KEGG AD biased genes with \n differential edges") + 
+  theme(text=element_text(size=20)) +
+  scale_fill_gradient(low = '#FFAABB', high = '#99DDFF') 
+ggsave("FunctionalEnrich_diff_edges/ADvsMDDfem/KEGG_difftarget_AD.pdf", height = 6, width = 14, device = "pdf")
+plotEnrich(enriched_AD[[4]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "Reactome AD biased genes with \n differential edges") + 
+  theme(text=element_text(size=20)) +
+  scale_fill_gradient(low = '#FFAABB', high = '#99DDFF') 
+ggsave("FunctionalEnrich_diff_edges/ADvsMDDfem/Reactome_difftarget_AD.pdf", height = 6, width = 14, device = "pdf")
+```
+
+## MDD-biased genes
+
+```{r}
+enriched_MDD <- enrichr(diff_MDD_genes, dbs)
+enriched_MDD <- lapply(enriched_MDD, function(x) x <- x %>% dplyr::filter(Adjusted.P.value <= 0.05))
+lapply(enriched_MDD, function(x) write.table(data.frame(x), 'FunctionalEnrich_diff_edges/ADvsMDDfem/MDD_biased.txt',
+                                           append = T, sep='\t', quote = F))
+enriched_MDD[["GO_Biological_Process_2021"]][["Term"]] <- gsub("\\(.*","",
+                                                              enriched_MDD[["GO_Biological_Process_2021"]][["Term"]])
+enriched_MDD[["GO_Molecular_Function_2021"]][["Term"]] <- gsub("\\(.*","",
+                                                              enriched_MDD[["GO_Molecular_Function_2021"]][["Term"]])
+enriched_MDD[[4]][["Term"]] <- gsub(" R-HSA-.*", "", enriched_MDD[[4]][["Term"]])
+enriched_MDD[[4]][["Term"]] <- gsub(" Homo sapiens", "", enriched_MDD[[4]][["Term"]])
+enriched_MDD[[5]][["Term"]] <- gsub(" WP.*", "", enriched_MDD[[5]][["Term"]])
+
+enriched_MDD[[1]][["P.value"]] <- enriched_MDD[[1]][["Adjusted.P.value"]]
+enriched_MDD[[2]][["P.value"]] <- enriched_MDD[[2]][["Adjusted.P.value"]]
+enriched_MDD[[3]][["P.value"]] <- enriched_MDD[[3]][["Adjusted.P.value"]]
+enriched_MDD[[4]][["P.value"]] <- enriched_MDD[[4]][["Adjusted.P.value"]]
+enriched_MDD[[5]][["P.value"]] <- enriched_MDD[[5]][["Adjusted.P.value"]]
+```
+
+```{r}
+plotEnrich(enriched_MDD[[1]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "GO BP \n MDD biased genes") + 
+  theme(text=element_text(size = 20)) +
+  scale_fill_gradient(low = '#FFAABB', high = '#99DDFF') 
+ggsave("FunctionalEnrich_diff_edges/ADvsMDDfem/GO_BP_difftarget_MDD.pdf", height = 5, width = 10, device = "pdf")
+plotEnrich(enriched_MDD[[2]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "GO Molecular Function MDD biased \n genes with differential edges") + 
+  theme(text=element_text(size = 20)) +
+  scale_fill_gradient(low = '#FFAABB', high = '#99DDFF') 
+ggsave("FunctionalEnrich_diff_edges/ADvsMDDfem/GO_MF_difftarget_MDD.pdf", height = 6, width = 14, device = "pdf")
+plotEnrich(enriched_MDD[[3]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "KEGG MDD biased genes with differential edges") + 
+  theme(text=element_text(size = 20)) +
+  scale_fill_gradient(low = '#FFAABB', high = '#99DDFF') 
+ggsave("FunctionalEnrich_diff_edges/ADvsMDDfem/KEGG_difftarget_MDD.pdf", height = 6, width = 14, device = "pdf")
+plotEnrich(enriched_MDD[[4]], showTerms = 20, numChar = 80, y = "Count", orderBy = "P.value", 
+           title = "Reactome MDD biased genes \n with differential edges") + 
+  theme(text=element_text(size = 20)) +
+  scale_fill_gradient(low = '#FFAABB', high = '#99DDFF') 
+ggsave("FunctionalEnrich_diff_edges/ADvsMDDfem/Reactome_difftarget_MDD.pdf", height = 6, width = 14, device = "pdf")
+```

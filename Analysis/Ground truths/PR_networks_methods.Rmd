@@ -1,0 +1,947 @@
+---
+title: "Precision and recall GRN methods"
+author: "Hanne Puype"
+date: "2025-02-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load packages
+```{r}
+library(tidyverse)
+library(cowplot)
+```
+
+
+## Load networks
+```{r}
+# GENIE3
+netGENIE3_AD <- read.table("../LinkList_AD_top.csv", header = T, sep = ",")
+netGENIE3_MDD <- read.table("../LinkList_MDD_top.csv", header = T, sep = ",")
+
+# CLR
+networkCLR_AD <- read.table("../network_AD_reg.csv", header = T, sep = ",")
+networkCLR_MDD <- read.table("../network_MDD_reg.csv", header = T, sep = ",")
+
+# Lemon-Tree
+netLT_AD <- read.table("../Lemon-Tree/EdgeListLT3_AD.csv", sep = ",", header = T)
+netLT_MDD <- read.table("../Lemon-Tree/EdgeListLT3_MDD.csv", sep = ",", header = T)
+```
+
+
+## KnockTF
+```{r}
+DE_all <- read.delim("../KnockTF/differential_expression_of_genes_all_datasets.txt")
+DE_all <- DE_all %>% distinct()
+```
+
+#### GENIE3 
+```{r}
+DE_all_AD <- DE_all %>% filter(TF %in% netGENIE3_AD$regulatoryGene)
+DE_all_AD <- DE_all_AD %>% filter(Gene %in% netGENIE3_AD$targetGene)
+DE_all_MDD <- DE_all %>% filter(TF %in% netGENIE3_MDD$regulatoryGene)
+DE_all_MDD <- DE_all_MDD %>% filter(Gene %in% netGENIE3_MDD$targetGene)
+
+netGENIE3_AD <- netGENIE3_AD %>% filter(regulatoryGene %in% DE_all_AD$TF)
+dim(netGENIE3_AD)
+length(unique(DE_all_AD$TF)) # 158
+netGENIE3_MDD <- netGENIE3_MDD %>% filter(regulatoryGene %in% DE_all_MDD$TF)
+dim(netGENIE3_MDD)
+length(unique(DE_all_MDD$TF)) # 170
+
+netGENIE3_AD_f <- netGENIE3_AD %>% filter(targetGene %in% DE_all_AD$Gene)
+netGENIE3_MDD_f <- netGENIE3_MDD %>% filter(targetGene %in% DE_all_MDD$Gene)
+```
+
+```{r}
+DE_all_AD$concat <- paste(DE_all_AD$TF, DE_all_AD$Gene, sep = ":")
+netGENIE3_AD_f$concat <- paste(netGENIE3_AD_f$regulatoryGene, netGENIE3_AD_f$targetGene, sep = ":")
+
+true_pos <- length(intersect(DE_all_AD$concat, netGENIE3_AD_f$concat))
+precision_GENIE3_AD <- true_pos / dim(netGENIE3_AD_f)[1]
+recall_GENIE3_AD <- true_pos / dim(DE_all_AD)[1]
+print(c("Precision of AD network:", precision_GENIE3_AD), quote = F)
+print(c("Recall of AD network:", recall_GENIE3_AD), quote = F)
+```
+
+```{r}
+DE_all_MDD$concat <- paste(DE_all_MDD$TF, DE_all_MDD$Gene, sep = ":")
+netGENIE3_MDD_f$concat <- paste(netGENIE3_MDD_f$regulatoryGene, netGENIE3_MDD_f$targetGene, sep = ":")
+
+true_pos <- length(intersect(DE_all_MDD$concat, netGENIE3_MDD_f$concat))
+precision_GENIE3_MDD <- true_pos / dim(netGENIE3_MDD_f)[1]
+recall_GENIE3_MDD <- true_pos / dim(DE_all_MDD)[1]
+print(c("Precision of MDD network:", precision_GENIE3_MDD), quote = F)
+print(c("Recall of MDD network:", recall_GENIE3_MDD), quote = F)
+```
+
+#### CLR
+```{r}
+DE_all_AD <- DE_all %>% filter(TF %in% networkCLR_AD$gene1)
+DE_all_AD <- DE_all_AD %>% filter(Gene %in% networkCLR_AD$gene2)
+DE_all_MDD <- DE_all %>% filter(TF %in% networkCLR_MDD$gene1)
+DE_all_MDD <- DE_all_MDD %>% filter(Gene %in% networkCLR_MDD$gene2)
+
+networkCLR_AD <- networkCLR_AD %>% filter(gene1 %in% DE_all_AD$TF)
+dim(networkCLR_AD)
+length(unique(DE_all_AD$TF)) # 160
+networkCLR_MDD <- networkCLR_MDD %>% filter(gene1 %in% DE_all_MDD$TF)
+dim(networkCLR_MDD)
+length(unique(DE_all_MDD$TF)) # 171
+
+networkCLR_AD_f <- networkCLR_AD %>% filter(gene2 %in% DE_all_AD$Gene)
+networkCLR_MDD_f <- networkCLR_MDD %>% filter(gene2 %in% DE_all_MDD$Gene)
+```
+
+```{r}
+DE_all_AD$concat <- paste(DE_all_AD$TF, DE_all_AD$Gene, sep = ":")
+networkCLR_AD_f$concat <- paste(networkCLR_AD_f$gene1, networkCLR_AD_f$gene2, sep = ":")
+
+true_pos <- length(intersect(DE_all_AD$concat, networkCLR_AD_f$concat))
+precision_CLR_AD <- true_pos / dim(networkCLR_AD_f)[1]
+recall_CLR_AD <- true_pos / dim(DE_all_AD)[1]
+print(c("Precision of AD network:", precision_CLR_AD), quote = F)
+print(c("Recall of AD network:", recall_CLR_AD), quote = F)
+```
+
+```{r}
+DE_all_MDD$concat <- paste(DE_all_MDD$TF, DE_all_MDD$Gene, sep = ":")
+networkCLR_MDD_f$concat <- paste(networkCLR_MDD_f$gene1, networkCLR_MDD_f$gene2, sep = ":")
+
+true_pos <- length(intersect(DE_all_MDD$concat, networkCLR_MDD_f$concat))
+precision_CLR_MDD <- true_pos / dim(networkCLR_MDD_f)[1]
+recall_CLR_MDD <- true_pos / dim(DE_all_MDD)[1]
+print(c("Precision of MDD network:", precision_CLR_MDD), quote = F)
+print(c("Recall of MDD network:", recall_CLR_MDD), quote = F)
+```
+
+### Lemon-tree
+```{r}
+DE_all_AD <- DE_all %>% filter(TF %in% netLT_AD$Regulator)
+DE_all_AD <- DE_all_AD %>% filter(Gene %in% netLT_AD$Target_gene)
+DE_all_MDD <- DE_all %>% filter(TF %in% netLT_MDD$Regulator)
+DE_all_MDD <- DE_all_MDD %>% filter(Gene %in% netLT_MDD$Target_gene)
+
+netLT_AD <- netLT_AD %>% filter(Regulator %in% DE_all_AD$TF)
+dim(netLT_AD)
+length(unique(DE_all_AD$TF)) # 111
+netLT_MDD <- netLT_MDD %>% filter(Regulator %in% DE_all_MDD$TF)
+dim(netLT_MDD)
+length(unique(DE_all_MDD$TF)) # 135
+
+netLT_AD_f <- netLT_AD %>% filter(Target_gene %in% DE_all_AD$Gene)
+netLT_MDD_f <- netLT_MDD %>% filter(Target_gene %in% DE_all_MDD$Gene)
+```
+
+```{r}
+DE_all_AD$concat <- paste(DE_all_AD$TF, DE_all_AD$Gene, sep = ":")
+netLT_AD_f$concat <- paste(netLT_AD_f$Regulator, netLT_AD_f$Target_gene, sep = ":")
+
+true_pos <- length(intersect(DE_all_AD$concat, netLT_AD_f$concat))
+precision_LT_AD <- true_pos / dim(netLT_AD_f)[1]
+recall_LT_AD <- true_pos / dim(DE_all_AD)[1]
+print(c("Precision of AD network:", precision_LT_AD), quote = F)
+print(c("Recall of AD network:", recall_LT_AD), quote = F)
+```
+
+```{r}
+DE_all_MDD$concat <- paste(DE_all_MDD$TF, DE_all_MDD$Gene, sep = ":")
+netLT_MDD_f$concat <- paste(netLT_MDD_f$Regulator, netLT_MDD_f$Target_gene, sep = ":")
+
+true_pos <- length(intersect(DE_all_MDD$concat, netLT_MDD_f$concat))
+precision_LT_MDD <- true_pos / dim(netLT_MDD_f)[1]
+recall_LT_MDD <- true_pos / dim(DE_all_MDD)[1]
+print(c("Precision of MDD network:", precision_LT_MDD), quote = F)
+print(c("Recall of MDD network:", recall_LT_MDD), quote = F)
+```
+
+```{r}
+PR_combined <- as.data.frame(c(precision_GENIE3_AD, precision_GENIE3_MDD, 
+                               precision_CLR_AD, precision_CLR_MDD,
+                               precision_LT_AD, precision_LT_MDD,
+                               recall_GENIE3_AD, recall_GENIE3_MDD, 
+                               recall_CLR_AD, recall_CLR_MDD,
+                               recall_LT_AD, recall_LT_MDD))
+names(PR_combined) <- "PR"
+row.names(PR_combined) <- c("precision_GENIE3_AD", "precision_GENIE3_MDD", 
+                            "precision_CLR_AD", "precision_CLR_MDD",
+                            "precision_LT_AD", "precision_LT_MDD", 
+                            "recall_GENIE3_AD", "recall_GENIE3_MDD", 
+                            "recall_CLR_AD", "recall_CLR_MDD",
+                            "recall_LT_AD", "recall_LT_MDD")
+write.table(PR_combined, file = "PR_allmethods_KnockTF.txt", 
+            quote = F, row.names = T, col.names = T, sep = "\t")
+```
+
+
+## UniBind 
+```{r}
+closest_UniBind_TSS <- read.table("../UniBind/closest_UniBind_TSS_ndup.bed")
+colnames(closest_UniBind_TSS) <- c("TF", "Gene", "Distance")
+closest_UniBind_TSS_f <- closest_UniBind_TSS %>% filter(Distance < 10000)
+dbTF <- read.csv("../dbTF.csv", sep = "")
+closest_UniBind_TSS_f <- closest_UniBind_TSS_f %>% filter(TF %in% dbTF$Gene_symbol)
+```
+
+```{r}
+# GENIE3
+netGENIE3_AD <- read.table("../LinkList_AD_top.csv", header = T, sep = ",")
+netGENIE3_MDD <- read.table("../LinkList_MDD_top.csv", header = T, sep = ",")
+
+# CLR
+networkCLR_AD <- read.table("../network_AD_reg.csv", header = T, sep = ",")
+networkCLR_MDD <- read.table("../network_MDD_reg.csv", header = T, sep = ",")
+
+# Lemon-Tree
+netLT_AD <- read.table("../Lemon-Tree/EdgeListLT3_AD.csv", sep = ",", header = T)
+netLT_MDD <- read.table("../Lemon-Tree/EdgeListLT3_MDD.csv", sep = ",", header = T)
+```
+
+### GENIE3
+```{r}
+UniBind_AD <- closest_UniBind_TSS_f %>% filter(TF %in% netGENIE3_AD$regulatoryGene) %>% 
+  filter(Gene %in% netGENIE3_AD$targetGene)
+UniBind_MDD <- closest_UniBind_TSS_f %>% filter(TF %in% netGENIE3_MDD$regulatoryGene) %>% 
+  filter(Gene %in% netGENIE3_MDD$targetGene)
+netGENIE3_AD_f <- netGENIE3_AD %>% filter(regulatoryGene %in% UniBind_AD$TF) %>% 
+  filter(targetGene %in% UniBind_AD$Gene)
+netGENIE3_MDD_f <- netGENIE3_MDD %>% filter(regulatoryGene %in% UniBind_MDD$TF) %>% 
+  filter(targetGene %in% UniBind_MDD$Gene)
+```
+
+```{r}
+UniBind_AD$concat <- paste(UniBind_AD$TF, UniBind_AD$Gene, sep = ":")
+netGENIE3_AD_f$concat <- paste(netGENIE3_AD_f$regulatoryGene, netGENIE3_AD_f$targetGene, sep = ":")
+
+true_pos <- length(intersect(UniBind_AD$concat, netGENIE3_AD_f$concat))
+precision_GENIE3_AD <- true_pos / dim(netGENIE3_AD_f)[1]
+recall_GENIE3_AD <- true_pos / dim(UniBind_AD)[1]
+print(c("Precision of GENIE3 AD network:", precision_GENIE3_AD), quote = F)
+print(c("Recall of GENIE3 AD network:", recall_GENIE3_AD), quote = F)
+```
+
+```{r}
+UniBind_MDD$concat <- paste(UniBind_MDD$TF, UniBind_MDD$Gene, sep = ":")
+netGENIE3_MDD_f$concat <- paste(netGENIE3_MDD_f$regulatoryGene, netGENIE3_MDD_f$targetGene, sep = ":")
+
+true_pos <- length(intersect(UniBind_MDD$concat, netGENIE3_MDD_f$concat))
+precision_GENIE3_MDD <- true_pos / dim(netGENIE3_MDD_f)[1]
+recall_GENIE3_MDD <- true_pos / dim(UniBind_MDD)[1]
+print(c("Precision of GENIE3 MDD network:", precision_GENIE3_MDD), quote = F)
+print(c("Recall of GENIE3 MDD network:", recall_GENIE3_MDD), quote = F)
+```
+
+### CLR
+```{r}
+UniBind_AD <- closest_UniBind_TSS_f %>% filter(TF %in% networkCLR_AD$gene1) %>% 
+  filter(Gene %in% networkCLR_AD$gene2)
+UniBind_MDD <- closest_UniBind_TSS_f %>% filter(TF %in% networkCLR_MDD$gene1) %>% 
+  filter(Gene %in% networkCLR_MDD$gene2)
+networkCLR_AD_f <- networkCLR_AD %>% filter(gene1 %in% UniBind_AD$TF) %>% 
+  filter(gene2 %in% UniBind_AD$Gene)
+networkCLR_MDD_f <- networkCLR_MDD %>% filter(gene1 %in% UniBind_MDD$TF) %>% 
+  filter(gene2 %in% UniBind_MDD$Gene)
+```
+
+```{r}
+UniBind_AD$concat <- paste(UniBind_AD$TF, UniBind_AD$Gene, sep = ":")
+networkCLR_AD_f$concat <- paste(networkCLR_AD_f$gene1, networkCLR_AD_f$gene2, sep = ":")
+
+true_pos <- length(intersect(UniBind_AD$concat, networkCLR_AD_f$concat))
+precision_CLR_AD <- true_pos / dim(networkCLR_AD_f)[1]
+recall_CLR_AD <- true_pos / dim(UniBind_AD)[1]
+print(c("Precision of CLR AD network:", precision_CLR_AD), quote = F)
+print(c("Recall of CLR AD network:", recall_CLR_AD), quote = F)
+```
+
+```{r}
+UniBind_MDD$concat <- paste(UniBind_MDD$TF, UniBind_MDD$Gene, sep = ":")
+networkCLR_MDD_f$concat <- paste(networkCLR_MDD_f$gene1, networkCLR_MDD_f$gene2, sep = ":")
+
+true_pos <- length(intersect(UniBind_MDD$concat, networkCLR_MDD_f$concat))
+precision_CLR_MDD <- true_pos / dim(networkCLR_MDD_f)[1]
+recall_CLR_MDD <- true_pos / dim(UniBind_MDD)[1]
+print(c("Precision of CLR MDD network:", precision_CLR_MDD), quote = F)
+print(c("Recall of CLR MDD network:", recall_CLR_MDD), quote = F)
+```
+
+### Lemon-Tree
+```{r}
+UniBind_AD <- closest_UniBind_TSS_f %>% filter(TF %in% netLT_AD$Regulator) %>% 
+  filter(Gene %in% netLT_AD$Target_gene)
+UniBind_MDD <- closest_UniBind_TSS_f %>% filter(TF %in% netLT_MDD$Regulator) %>% 
+  filter(Gene %in% netLT_MDD$Target_gene)
+netLT_AD_f <- netLT_AD %>% filter(Regulator %in% UniBind_AD$TF) %>% 
+  filter(Target_gene %in% UniBind_AD$Gene)
+netLT_MDD_f <- netLT_MDD %>% filter(Regulator %in% UniBind_MDD$TF) %>% 
+  filter(Target_gene %in% UniBind_MDD$Gene)
+```
+
+```{r}
+UniBind_AD$concat <- paste(UniBind_AD$TF, UniBind_AD$Gene, sep = ":")
+netLT_AD_f$concat <- paste(netLT_AD_f$Regulator, netLT_AD_f$Target_gene, sep = ":")
+
+true_pos <- length(intersect(UniBind_AD$concat, netLT_AD_f$concat))
+precision_LT_AD <- true_pos / dim(netLT_AD_f)[1]
+recall_LT_AD <- true_pos / dim(UniBind_AD)[1]
+print(c("Precision of LT AD network:", precision_LT_AD), quote = F)
+print(c("Recall of LT AD network:", recall_LT_AD), quote = F)
+```
+
+```{r}
+UniBind_MDD$concat <- paste(UniBind_MDD$TF, UniBind_MDD$Gene, sep = ":")
+netLT_MDD_f$concat <- paste(netLT_MDD_f$Regulator, netLT_MDD_f$Target_gene, sep = ":")
+
+true_pos <- length(intersect(UniBind_MDD$concat, netLT_MDD_f$concat))
+precision_LT_MDD <- true_pos / dim(netLT_MDD_f)[1]
+recall_LT_MDD <- true_pos / dim(UniBind_MDD)[1]
+print(c("Precision of LT MDD network:", precision_LT_MDD), quote = F)
+print(c("Recall of LT MDD network:", recall_LT_MDD), quote = F)
+```
+
+```{r}
+PR_combined <- as.data.frame(c(precision_GENIE3_AD, precision_GENIE3_MDD, 
+                               precision_CLR_AD, precision_CLR_MDD,
+                               precision_LT_AD, precision_LT_MDD,
+                               recall_GENIE3_AD, recall_GENIE3_MDD, 
+                               recall_CLR_AD, recall_CLR_MDD,
+                               recall_LT_AD, recall_LT_MDD))
+names(PR_combined) <- "PR"
+row.names(PR_combined) <- c("precision_GENIE3_AD", "precision_GENIE3_MDD", 
+                            "precision_CLR_AD", "precision_CLR_MDD",
+                            "precision_LT_AD", "precision_LT_MDD", 
+                            "recall_GENIE3_AD", "recall_GENIE3_MDD", 
+                            "recall_CLR_AD", "recall_CLR_MDD",
+                            "recall_LT_AD", "recall_LT_MDD")
+write.table(PR_combined, file = "PR_allmethods_UniBInd.txt", 
+            quote = F, row.names = T, col.names = T, sep = "\t")
+```
+
+
+## OmniPath
+```{r}
+gri <- read.delim("../Omnipath/Omnipath.txt")
+gri_collecTRI <- read.delim("../Omnipath/CollecTRI.txt")
+gri_f <- bind_rows(gri, gri_collecTRI)
+gri_f <- gri_f %>% select(source_genesymbol, target_genesymbol)
+gri_f <- gri_f %>% distinct()
+```
+
+#### GENIE3 
+```{r}
+gri_f_AD <- gri_f %>% filter(source_genesymbol %in% netGENIE3_AD$regulatoryGene)
+gri_f_AD <- gri_f_AD %>% filter(target_genesymbol %in% netGENIE3_AD$targetGene)
+gri_f_MDD <- gri_f %>% filter(source_genesymbol %in% netGENIE3_MDD$regulatoryGene)
+gri_f_MDD <- gri_f_MDD %>% filter(target_genesymbol %in% netGENIE3_MDD$targetGene)
+
+netGENIE3_AD_f <- netGENIE3_AD %>% filter(regulatoryGene %in% gri_f_AD$source_genesymbol)
+netGENIE3_AD_f <- netGENIE3_AD_f %>% filter(targetGene %in% gri_f_AD$target_genesymbol)
+netGENIE3_MDD_f <- netGENIE3_MDD %>% filter(regulatoryGene %in% gri_f_MDD$source_genesymbol)
+netGENIE3_MDD_f <- netGENIE3_MDD_f %>% filter(targetGene %in% gri_f_MDD$target_genesymbol)
+```
+
+```{r}
+gri_f_AD$concat <- paste(gri_f_AD$source_genesymbol, gri_f_AD$target_genesymbol, sep = ":")
+netGENIE3_AD_f$concat <- paste(netGENIE3_AD_f$regulatoryGene, netGENIE3_AD_f$targetGene, sep = ":")
+
+true_pos <- length(intersect(gri_f_AD$concat, netGENIE3_AD_f$concat))
+precision_GENIE3_AD <- true_pos / dim(netGENIE3_AD_f)[1]
+recall_GENIE3_AD <- true_pos / dim(gri_f_AD)[1]
+print(c("Precision of AD network:", precision_GENIE3_AD), quote = F)
+print(c("Recall of AD network:", recall_GENIE3_AD), quote = F)
+```
+
+```{r}
+gri_f_MDD$concat <- paste(gri_f_MDD$source_genesymbol, gri_f_MDD$target_genesymbol, sep = ":")
+netGENIE3_MDD_f$concat <- paste(netGENIE3_MDD_f$regulatoryGene, netGENIE3_MDD_f$targetGene, sep = ":")
+
+true_pos <- length(intersect(gri_f_MDD$concat, netGENIE3_MDD_f$concat))
+precision_GENIE3_MDD <- true_pos / dim(netGENIE3_MDD_f)[1]
+recall_GENIE3_MDD <- true_pos / dim(gri_f_MDD)[1]
+print(c("Precision of MDD network:", precision_GENIE3_MDD), quote = F)
+print(c("Recall of MDD network:", recall_GENIE3_MDD), quote = F)
+```
+
+#### CLR
+```{r}
+gri_f_AD <- gri_f %>% filter(source_genesymbol %in% networkCLR_AD$gene1)
+gri_f_AD <- gri_f_AD %>% filter(target_genesymbol %in% networkCLR_AD$gene2)
+gri_f_MDD <- gri_f %>% filter(source_genesymbol %in% networkCLR_MDD$gene1)
+gri_f_MDD <- gri_f_MDD %>% filter(target_genesymbol %in% networkCLR_MDD$gene2)
+
+networkCLR_AD_f <- networkCLR_AD %>% filter(gene1 %in% gri_f_AD$source_genesymbol)
+networkCLR_AD_f <- networkCLR_AD_f %>% filter(gene2 %in% gri_f_AD$target_genesymbol)
+networkCLR_MDD_f <- networkCLR_MDD %>% filter(gene1 %in% gri_f_MDD$source_genesymbol)
+networkCLR_MDD_f <- networkCLR_MDD_f %>% filter(gene2 %in% gri_f_MDD$target_genesymbol)
+```
+
+```{r}
+gri_f_AD$concat <- paste(gri_f_AD$source_genesymbol, gri_f_AD$target_genesymbol, sep = ":")
+networkCLR_AD_f$concat <- paste(networkCLR_AD_f$gene1, networkCLR_AD_f$gene2, sep = ":")
+
+true_pos <- length(intersect(gri_f_AD$concat, networkCLR_AD_f$concat))
+precision_CLR_AD <- true_pos / dim(networkCLR_AD_f)[1]
+recall_CLR_AD <- true_pos / dim(gri_f_AD)[1]
+print(c("Precision of AD network:", precision_CLR_AD), quote = F)
+print(c("Recall of AD network:", recall_CLR_AD), quote = F)
+```
+
+```{r}
+gri_f_MDD$concat <- paste(gri_f_MDD$source_genesymbol, gri_f_MDD$target_genesymbol, sep = ":")
+networkCLR_MDD_f$concat <- paste(networkCLR_MDD_f$gene1, networkCLR_MDD_f$gene2, sep = ":")
+
+true_pos <- length(intersect(gri_f_MDD$concat, networkCLR_MDD_f$concat))
+precision_CLR_MDD <- true_pos / dim(networkCLR_MDD_f)[1]
+recall_CLR_MDD <- true_pos / dim(gri_f_MDD)[1]
+print(c("Precision of MDD network:", precision_CLR_MDD), quote = F)
+print(c("Recall of MDD network:", recall_CLR_MDD), quote = F)
+```
+
+#### Lemon-tree
+```{r}
+gri_f_AD <- gri_f %>% filter(source_genesymbol %in% netLT_AD$Regulator)
+gri_f_AD <- gri_f_AD %>% filter(target_genesymbol %in% netLT_AD$Target_gene)
+gri_f_MDD <- gri_f %>% filter(source_genesymbol %in% netLT_MDD$Regulator)
+gri_f_MDD <- gri_f_MDD %>% filter(target_genesymbol %in% netLT_MDD$Target_gene)
+
+netLT_AD_f <- netLT_AD %>% filter(Regulator %in% gri_f_AD$source_genesymbol)
+netLT_AD_f <- netLT_AD_f %>% filter(Target_gene %in% gri_f_AD$target_genesymbol)
+netLT_MDD_f <- netLT_MDD %>% filter(Regulator %in% gri_f_MDD$source_genesymbol)
+netLT_MDD_f <- netLT_MDD_f %>% filter(Target_gene %in% gri_f_MDD$target_genesymbol)
+```
+
+```{r}
+gri_f_AD$concat <- paste(gri_f_AD$source_genesymbol, gri_f_AD$target_genesymbol, sep = ":")
+netLT_AD_f$concat <- paste(netLT_AD_f$Regulator, netLT_AD_f$Target_gene, sep = ":")
+
+true_pos <- length(intersect(gri_f_AD$concat, netLT_AD_f$concat))
+precision_LT_AD <- true_pos / dim(netLT_AD_f)[1]
+recall_LT_AD <- true_pos / dim(gri_f_AD)[1]
+print(c("Precision of AD network:", precision_LT_AD), quote = F)
+print(c("Recall of AD network:", recall_LT_AD), quote = F)
+```
+
+```{r}
+gri_f_MDD$concat <- paste(gri_f_MDD$source_genesymbol, gri_f_MDD$target_genesymbol, sep = ":")
+netLT_MDD_f$concat <- paste(netLT_MDD_f$Regulator, netLT_MDD_f$Target_gene, sep = ":")
+
+true_pos <- length(intersect(gri_f_MDD$concat, netLT_MDD_f$concat))
+precision_LT_MDD <- true_pos / dim(netLT_MDD_f)[1]
+recall_LT_MDD <- true_pos / dim(gri_f_MDD)[1]
+print(c("Precision of MDD network:", precision_LT_MDD), quote = F)
+print(c("Recall of MDD network:", recall_LT_MDD), quote = F)
+```
+
+```{r}
+PR_combined <- as.data.frame(c(precision_GENIE3_AD, precision_GENIE3_MDD, 
+                               precision_CLR_AD, precision_CLR_MDD,
+                               precision_LT_AD, precision_LT_MDD,
+                               recall_GENIE3_AD, recall_GENIE3_MDD, 
+                               recall_CLR_AD, recall_CLR_MDD,
+                               recall_LT_AD, recall_LT_MDD))
+names(PR_combined) <- "PR"
+row.names(PR_combined) <- c("precision_GENIE3_AD", "precision_GENIE3_MDD", 
+                            "precision_CLR_AD", "precision_CLR_MDD",
+                            "precision_LT_AD", "precision_LT_MDD", 
+                            "recall_GENIE3_AD", "recall_GENIE3_MDD", 
+                            "recall_CLR_AD", "recall_CLR_MDD",
+                            "recall_LT_AD", "recall_LT_MDD")
+write.table(PR_combined, file = "PR_allmethods_Omnipath.txt", 
+            quote = F, row.names = T, col.names = T, sep = "\t")
+```
+
+## Marbach et al. 
+```{r}
+path_M <- "../networks/FANTOM5_individual_networks/394_individual_networks/frontal_lobe_adult.txt.gz"
+frontal_lobe_adult <- read.delim(path_M, 
+                                 header = FALSE)
+frontal_lobe_adult <- frontal_lobe_adult %>% select(V1, V2)
+names(frontal_lobe_adult) <- c("TF", "Target_gene")
+```
+
+#### GENIE3
+```{r}
+frontal_lobe_adult_AD <- frontal_lobe_adult %>% filter(TF %in% netGENIE3_AD$regulatoryGene)
+frontal_lobe_adult_AD <- frontal_lobe_adult_AD %>% filter(Target_gene %in% netGENIE3_AD$targetGene)
+frontal_lobe_adult_MDD <- frontal_lobe_adult %>% filter(TF %in% netGENIE3_MDD$regulatoryGene)
+frontal_lobe_adult_MDD <- frontal_lobe_adult_MDD %>% filter(Target_gene %in% netGENIE3_MDD$targetGene)
+
+netGENIE3_AD_f <- netGENIE3_AD %>% filter(regulatoryGene %in% frontal_lobe_adult_AD$TF)
+netGENIE3_AD_f <- netGENIE3_AD_f %>% filter(targetGene %in% frontal_lobe_adult_AD$Target_gene)
+netGENIE3_MDD_f <- netGENIE3_MDD %>% filter(regulatoryGene %in% frontal_lobe_adult_MDD$TF)
+netGENIE3_MDD_f <- netGENIE3_MDD_f %>% filter(targetGene %in% frontal_lobe_adult_MDD$Target_gene)
+```
+
+```{r}
+frontal_lobe_adult_AD$concat <- paste(frontal_lobe_adult_AD$TF, frontal_lobe_adult_AD$Target_gene, sep = ":")
+netGENIE3_AD_f$concat <- paste(netGENIE3_AD_f$regulatoryGene, netGENIE3_AD_f$targetGene, sep = ":")
+
+true_pos <- length(intersect(frontal_lobe_adult_AD$concat, netGENIE3_AD_f$concat))
+precision_GENIE3_AD <- true_pos / dim(netGENIE3_AD_f)[1]
+recall_GENIE3_AD <- true_pos / dim(frontal_lobe_adult_AD)[1]
+print(c("Precision of AD network:", precision_GENIE3_AD), quote = F)
+print(c("Recall of AD network:", recall_GENIE3_AD), quote = F)
+```
+
+```{r}
+frontal_lobe_adult_MDD$concat <- paste(frontal_lobe_adult_MDD$TF, frontal_lobe_adult_MDD$Target_gene, sep = ":")
+netGENIE3_MDD_f$concat <- paste(netGENIE3_MDD_f$regulatoryGene, netGENIE3_MDD_f$targetGene, sep = ":")
+
+true_pos <- length(intersect(frontal_lobe_adult_MDD$concat, netGENIE3_MDD_f$concat))
+precision_GENIE3_MDD <- true_pos / dim(netGENIE3_MDD_f)[1]
+recall_GENIE3_MDD <- true_pos / dim(frontal_lobe_adult_MDD)[1]
+print(c("Precision of MDD network:", precision_GENIE3_MDD), quote = F)
+print(c("Recall of MDD network:", recall_GENIE3_MDD), quote = F)
+```
+
+#### CLR
+```{r}
+frontal_lobe_adult_AD <- frontal_lobe_adult %>% filter(TF %in% networkCLR_AD$gene1)
+frontal_lobe_adult_AD <- frontal_lobe_adult_AD %>% filter(Target_gene %in% networkCLR_AD$gene2)
+frontal_lobe_adult_MDD <- frontal_lobe_adult %>% filter(TF %in% networkCLR_MDD$gene1)
+frontal_lobe_adult_MDD <- frontal_lobe_adult_MDD %>% filter(Target_gene %in% networkCLR_MDD$gene2)
+
+networkCLR_AD_f <- networkCLR_AD %>% filter(gene1 %in% frontal_lobe_adult_AD$TF)
+networkCLR_AD_f <- networkCLR_AD_f %>% filter(gene2 %in% frontal_lobe_adult_AD$Target_gene)
+networkCLR_MDD_f <- networkCLR_MDD %>% filter(gene1 %in% frontal_lobe_adult_MDD$TF)
+networkCLR_MDD_f <- networkCLR_MDD_f %>% filter(gene2 %in% frontal_lobe_adult_MDD$Target_gene)
+```
+
+```{r}
+frontal_lobe_adult_AD$concat <- paste(frontal_lobe_adult_AD$TF, frontal_lobe_adult_AD$Target_gene, sep = ":")
+networkCLR_AD_f$concat <- paste(networkCLR_AD_f$gene1, networkCLR_AD_f$gene2, sep = ":")
+
+true_pos <- length(intersect(frontal_lobe_adult_AD$concat, networkCLR_AD_f$concat))
+precision_CLR_AD <- true_pos / dim(networkCLR_AD_f)[1]
+recall_CLR_AD <- true_pos / dim(frontal_lobe_adult_AD)[1]
+print(c("Precision of AD network:", precision_CLR_AD), quote = F)
+print(c("Recall of AD network:", recall_CLR_AD), quote = F)
+```
+
+```{r}
+frontal_lobe_adult_MDD$concat <- paste(frontal_lobe_adult_MDD$TF, frontal_lobe_adult_MDD$Target_gene, sep = ":")
+networkCLR_MDD_f$concat <- paste(networkCLR_MDD_f$gene1, networkCLR_MDD_f$gene2, sep = ":")
+
+true_pos <- length(intersect(frontal_lobe_adult_MDD$concat, networkCLR_MDD_f$concat))
+precision_CLR_MDD <- true_pos / dim(networkCLR_MDD_f)[1]
+recall_CLR_MDD <- true_pos / dim(frontal_lobe_adult_MDD)[1]
+print(c("Precision of MDD network:", precision_CLR_MDD), quote = F)
+print(c("Recall of MDD network:", recall_CLR_MDD), quote = F)
+```
+
+#### Lemon-Tree
+```{r}
+frontal_lobe_adult_AD <- frontal_lobe_adult %>% filter(TF %in% netLT_AD$Regulator)
+frontal_lobe_adult_AD <- frontal_lobe_adult_AD %>% filter(Target_gene %in% netLT_AD$Target_gene)
+frontal_lobe_adult_MDD <- frontal_lobe_adult %>% filter(TF %in% netLT_MDD$Regulator)
+frontal_lobe_adult_MDD <- frontal_lobe_adult_MDD %>% filter(Target_gene %in% netLT_MDD$Target_gene)
+
+netLT_AD_f <- netLT_AD %>% filter(Regulator %in% frontal_lobe_adult_AD$TF)
+netLT_AD_f <- netLT_AD_f %>% filter(Target_gene %in% frontal_lobe_adult_AD$Target_gene)
+netLT_MDD_f <- netLT_MDD %>% filter(Regulator %in% frontal_lobe_adult_MDD$TF)
+netLT_MDD_f <- netLT_MDD_f %>% filter(Target_gene %in% frontal_lobe_adult_MDD$Target_gene)
+```
+
+```{r}
+frontal_lobe_adult_AD$concat <- paste(frontal_lobe_adult_AD$TF, frontal_lobe_adult_AD$Target_gene, sep = ":")
+netLT_AD_f$concat <- paste(netLT_AD_f$Regulator, netLT_AD_f$Target_gene, sep = ":")
+
+true_pos <- length(intersect(frontal_lobe_adult_AD$concat, netLT_AD_f$concat))
+precision_LT_AD <- true_pos / dim(netLT_AD_f)[1]
+recall_LT_AD <- true_pos / dim(frontal_lobe_adult_AD)[1]
+print(c("Precision of AD network:", precision_LT_AD), quote = F)
+print(c("Recall of AD network:", recall_LT_AD), quote = F)
+```
+
+```{r}
+frontal_lobe_adult_MDD$concat <- paste(frontal_lobe_adult_MDD$TF, frontal_lobe_adult_MDD$Target_gene, sep = ":")
+netLT_MDD_f$concat <- paste(netLT_MDD_f$Regulator, netLT_MDD_f$Target_gene, sep = ":")
+
+true_pos <- length(intersect(frontal_lobe_adult_MDD$concat, netLT_MDD_f$concat))
+precision_LT_MDD <- true_pos / dim(netLT_MDD_f)[1]
+recall_LT_MDD <- true_pos / dim(frontal_lobe_adult_MDD)[1]
+print(c("Precision of MDD network:", precision_LT_MDD), quote = F)
+print(c("Recall of MDD network:", recall_LT_MDD), quote = F)
+```
+
+```{r}
+PR_combined <- as.data.frame(c(precision_GENIE3_AD, precision_GENIE3_MDD, 
+                               precision_CLR_AD, precision_CLR_MDD,
+                               precision_LT_AD, precision_LT_MDD,
+                               recall_GENIE3_AD, recall_GENIE3_MDD, 
+                               recall_CLR_AD, recall_CLR_MDD,
+                               recall_LT_AD, recall_LT_MDD))
+names(PR_combined) <- "PR"
+row.names(PR_combined) <- c("precision_GENIE3_AD", "precision_GENIE3_MDD", 
+                            "precision_CLR_AD", "precision_CLR_MDD",
+                            "precision_LT_AD", "precision_LT_MDD", 
+                            "recall_GENIE3_AD", "recall_GENIE3_MDD", 
+                            "recall_CLR_AD", "recall_CLR_MDD",
+                            "recall_LT_AD", "recall_LT_MDD")
+write.table(PR_combined, file = "PR_allmethods_Marbach.txt", 
+            quote = F, row.names = T, col.names = T, sep = "\t")
+```
+
+
+## Plots per methods 
+load PR again for each grount truth
+```{r}
+PR_KnockTF <- read.table("PR_allmethods_KnockTF.txt", sep = "\t", header = T)
+PR_UniBind <- read.table("PR_allmethods_UniBInd.txt", sep = "\t", header = T)
+PR_Omnipath <- read.table("PR_allmethods_Omnipath.txt", sep = "\t", header = T)
+PR_Marbach <- read.table("PR_allmethods_Marbach.txt", sep = "\t", header = T)
+```
+
+```{r}
+GENIE3_AD <- data.frame("Ground_truth" = c(PR_Omnipath[1,], PR_Omnipath[7,], PR_Marbach[1,], PR_Marbach[7,], 
+                                           PR_KnockTF[1,], PR_KnockTF[7,], PR_UniBind[1,], PR_UniBind[7,]),
+                        "Source" = c("OmniPath", "OmniPath", "Marbach", "Marbach", 
+                                     "KnockTF", "KnockTF", "UniBind", "UniBind"), 
+                        "Measure" = c("Precision", "Recall", "Precision", "Recall", 
+                                      "Precision", "Recall", "Precision", "Recall"))
+
+GENIE3_MDD <- data.frame("Ground_truth" = c(PR_Omnipath[2,], PR_Omnipath[8,], PR_Marbach[2,], PR_Marbach[8,], 
+                                          PR_KnockTF[2,], PR_KnockTF[8,], PR_UniBind[2,], PR_UniBind[8,]),
+                         "Source" = c("OmniPath", "OmniPath", "Marbach", "Marbach", 
+                                      "KnockTF", "KnockTF", "UniBind", "UniBind"), 
+                         "Measure" = c("Precision", "Recall", "Precision", "Recall", 
+                                       "Precision", "Recall", "Precision", "Recall"))
+```
+
+```{r}
+CLR_AD <- data.frame("Ground_truth" = c(PR_Omnipath[3,], PR_Omnipath[9,], PR_Marbach[3,], PR_Marbach[9,], 
+                                        PR_KnockTF[3,], PR_KnockTF[9,], PR_UniBind[3,], PR_UniBind[9,]),
+                     "Source" = c("OmniPath", "OmniPath", "Marbach", "Marbach", 
+                                  "KnockTF", "KnockTF", "UniBind", "UniBind"), 
+                     "Measure" = c("Precision", "Recall", "Precision", "Recall", 
+                                   "Precision", "Recall", "Precision", "Recall"))
+
+CLR_MDD <- data.frame("Ground_truth" = c(PR_Omnipath[4,], PR_Omnipath[10,], PR_Marbach[4,], PR_Marbach[10,], 
+                                         PR_KnockTF[4,], PR_KnockTF[10,], PR_UniBind[4,], PR_UniBind[10,]),
+                      "Source" = c("OmniPath", "OmniPath", "Marbach", "Marbach", 
+                                   "KnockTF", "KnockTF", "UniBind", "UniBind"), 
+                      "Measure" = c("Precision", "Recall", "Precision", "Recall", 
+                                    "Precision", "Recall", "Precision", "Recall"))
+```
+
+```{r}
+LT_AD <- data.frame("Ground_truth" = c(PR_Omnipath[5,], PR_Omnipath[11,], PR_Marbach[5,], PR_Marbach[11,], 
+                                       PR_KnockTF[5,], PR_KnockTF[11,], PR_UniBind[5,], PR_UniBind[11,]),
+                    "Source" = c("OmniPath", "OmniPath", "Marbach", "Marbach", 
+                                 "KnockTF", "KnockTF", "UniBind", "UniBind"), 
+                    "Measure" = c("Precision", "Recall", "Precision", "Recall", 
+                                  "Precision", "Recall", "Precision", "Recall"))
+
+LT_MDD <- data.frame("Ground_truth" = c(PR_Omnipath[6,], PR_Omnipath[12,], PR_Marbach[6,], PR_Marbach[12,], 
+                                        PR_KnockTF[6,], PR_KnockTF[12,], PR_UniBind[6,], PR_UniBind[12,]),
+                         "Source" = c("OmniPath", "OmniPath", "Marbach", "Marbach", 
+                                      "KnockTF", "KnockTF", "UniBind", "UniBind"), 
+                         "Measure" = c("Precision", "Recall", "Precision", "Recall", 
+                                       "Precision", "Recall", "Precision", "Recall"))
+```
+
+```{r fig.width=12, fig.height=6}
+p1 <- ggplot(GENIE3_AD, aes(x = Source, y = Ground_truth, fill = Measure)) +
+  geom_bar(stat="identity", position = position_dodge()) +
+  scale_fill_manual(values = c('#99DDFF', '#44BB99')) +
+  theme_classic() +
+  labs(title = "AD GENIE3 network", x = "Source", y = "Value") +
+  theme(text = element_text(size = 18)) +
+  geom_text(aes(label = round(Ground_truth, 3)), vjust = -0.3, color = "black",
+            position = position_dodge(0.9), size = 3.5)
+
+p2 <- ggplot(GENIE3_MDD, aes(x = Source, y = Ground_truth, fill = Measure)) +
+  geom_bar(stat="identity", position= position_dodge()) +
+  scale_fill_manual(values=c('#99DDFF', '#44BB99')) +
+  theme_classic() +
+  labs(title="MDD GENIE3 network", x = "Source", y = "Value") +
+  theme(text = element_text(size = 18)) +
+  geom_text(aes(label = round(Ground_truth, 3)), vjust = -0.3, color = "black",
+            position = position_dodge(0.9), size = 3.5)
+plot_grid(p1, p2, align='vh')
+ggsave(filename = "PR_GENIE3.pdf", device = "pdf", width = 12, height = 5)
+```
+
+```{r fig.width=12, fig.height=6}
+p1 <- ggplot(CLR_AD, aes(x = Source, y = Ground_truth, fill = Measure)) +
+  geom_bar(stat="identity", position = position_dodge()) +
+  scale_fill_manual(values = c('#99DDFF', '#44BB99')) +
+  theme_classic() +
+  labs(title = "AD CLR network", x = "Source", y = "Value") +
+  theme(text = element_text(size = 18)) +
+  geom_text(aes(label = round(Ground_truth, 3)), vjust = -0.3, color = "black",
+            position = position_dodge(0.9), size = 3.5)
+
+p2 <- ggplot(CLR_MDD, aes(x = Source, y = Ground_truth, fill = Measure)) +
+  geom_bar(stat="identity", position= position_dodge()) +
+  scale_fill_manual(values=c('#99DDFF', '#44BB99')) +
+  theme_classic() +
+  labs(title="MDD CLR network", x = "Source", y = "Value") +
+  theme(text = element_text(size = 18)) +
+  geom_text(aes(label = round(Ground_truth, 3)), vjust = -0.3, color = "black",
+            position = position_dodge(0.9), size = 3.5)
+plot_grid(p1, p2, align='vh')
+ggsave(filename = "PR_CLR.pdf", device = "pdf", width = 12, height = 5)
+```
+
+```{r fig.width=12, fig.height=6}
+p1 <- ggplot(LT_AD, aes(x = Source, y = Ground_truth, fill = Measure)) +
+  geom_bar(stat="identity", position = position_dodge()) +
+  scale_fill_manual(values = c('#99DDFF', '#44BB99')) +
+  theme_classic() +
+  labs(title = "AD Lemon-Tree network", x = "Source", y = "Value") +
+  theme(text = element_text(size = 18)) +
+  geom_text(aes(label = round(Ground_truth, 3)), vjust = -0.3, color = "black",
+            position = position_dodge(0.9), size = 3.5)
+
+p2 <- ggplot(LT_MDD, aes(x = Source, y = Ground_truth, fill = Measure)) +
+  geom_bar(stat="identity", position= position_dodge()) +
+  scale_fill_manual(values=c('#99DDFF', '#44BB99')) +
+  theme_classic() +
+  labs(title="MDD Lemon-Tree network", x = "Source", y = "Value") +
+  theme(text = element_text(size = 18)) +
+  geom_text(aes(label = round(Ground_truth, 3)), vjust = -0.3, color = "black",
+            position = position_dodge(0.9), size = 3.5)
+plot_grid(p1, p2, align='vh')
+ggsave(filename = "PR_LT.pdf", device = "pdf", width = 12, height = 5)
+```
+
+## Plots with dfiferent cut-offs
+100, 500, 1000, 5000, 10000, 50000, 100000
+
+### Union of ground truths 
+```{r}
+colnames(gri_f) <- c("TF", "Gene") 
+colnames(frontal_lobe_adult) <- c("TF", "Gene") 
+DE_all <- DE_all %>% select(TF, Gene)
+frontal_lobe_adult <- frontal_lobe_adult %>% select(TF, Gene)
+closest_UniBind_TSS_f <- closest_UniBind_TSS_f %>% select(TF, Gene)
+```
+
+```{r}
+union_GT <- rbind(DE_all, frontal_lobe_adult, gri_f, closest_UniBind_TSS_f) # 11 539 238
+union_GT <- union_GT %>% distinct() # 6 647 744 
+union_GT <- union_GT %>% filter(TF %in% dbTF$Gene_symbol) # 4 987 612 
+length(table(union_GT$TF)) # 918 TFs 
+union_GT$concat <- paste(union_GT$TF, union_GT$Gene, sep = ":")
+```
+
+```{r}
+gri_f$concat <- paste(gri_f$TF, gri_f$Gene, sep = ":")
+DE_all$concat <- paste(DE_all$TF, DE_all$Gene, sep = ":")
+frontal_lobe_adult$concat <- paste(frontal_lobe_adult$TF, frontal_lobe_adult$Gene, sep = ":")
+closest_UniBind_TSS_f$concat <- paste(closest_UniBind_TSS_f$TF, closest_UniBind_TSS_f$Gene, sep = ":")
+```
+
+### Load networks 
+```{r}
+network_AD <- read.delim("../ensemble_netw_AD.txt")
+network_MDD <- read.delim("../ensemble_netw_MDD.txt")
+single_cell_AD <- read.delim("../Single-cell/edgelist_sc_AD.txt")
+single_cell_MDD <- read.delim("../Single-cell/edgelist_sc_MDD.txt")
+```
+
+```{r}
+network_AD$concat <- paste(network_AD$TF, network_AD$Target_gene, sep = ":")
+network_MDD$concat <- paste(network_MDD$TF, network_MDD$Target_gene, sep = ":")
+single_cell_AD$concat <- paste(single_cell_AD$regulator, single_cell_AD$gene, sep = ":")
+single_cell_MDD$concat <- paste(single_cell_MDD$regulator, single_cell_MDD$gene, sep = ":")
+```
+
+```{r}
+network_AD_100 <- network_AD %>% slice(c(1:100))
+network_AD_500 <- network_AD %>% slice(c(1:500))
+network_AD_1000 <- network_AD %>% slice(c(1:1000))
+network_AD_5000 <- network_AD %>% slice(c(1:5000))
+network_AD_10000 <- network_AD %>% slice(c(1:10000))
+network_AD_50000 <- network_AD %>% slice(c(1:50000))
+
+network_MDD_100 <- network_MDD %>% slice(c(1:100))
+network_MDD_500 <- network_MDD %>% slice(c(1:500))
+network_MDD_1000 <- network_MDD %>% slice(c(1:1000))
+network_MDD_5000 <- network_MDD %>% slice(c(1:5000))
+network_MDD_10000 <- network_MDD %>% slice(c(1:10000))
+network_MDD_50000 <- network_MDD %>% slice(c(1:50000))
+```
+
+Networks with more edges 
+```{r}
+network_AD_200000 <- read.table(file = "ensemble_netw_AD_200.txt", sep = "\t", header = T)
+network_AD_150000 <- read.table(file = "ensemble_netw_AD_150.txt", sep = "\t", header = T)
+network_MDD_200000 <- read.table(file = "ensemble_netw_MDD_200.txt", sep = "\t", header = T)
+network_MDD_150000 <- read.table(file = "ensemble_netw_MDD_150.txt", sep = "\t", header = T)
+network_AD_200000$concat <- paste(network_AD_200000$TF, network_AD_200000$Target_gene, sep = ":")
+network_AD_150000$concat <- paste(network_AD_150000$TF, network_AD_150000$Target_gene, sep = ":")
+network_MDD_200000$concat <- paste(network_MDD_200000$TF, network_MDD_200000$Target_gene, sep = ":")
+network_MDD_150000$concat <- paste(network_MDD_150000$TF, network_MDD_150000$Target_gene, sep = ":")
+```
+
+
+Scores single-cell networks
+```{r}
+arboreto_AD <- read.delim("../Single-cell/SCENIC/counts_AD1__adj.tsv")
+arboreto_MDD <- read.delim("../Single-cell/SCENIC/counts_MDD__adj.tsv")
+colnames(arboreto_AD) <- c("regulator", "gene", "importance", "regulation", "rho")
+colnames(arboreto_MDD) <- c("regulator", "gene", "importance", "regulation", "rho")
+```
+
+```{r}
+single_cell_AD <- left_join(single_cell_AD, arboreto_AD, by = c("regulator", "gene"))
+single_cell_AD <- single_cell_AD %>% arrange(desc(importance))
+single_cell_MDD <- left_join(single_cell_MDD, arboreto_MDD, by = c("regulator", "gene"))
+single_cell_MDD <- single_cell_MDD %>% arrange(desc(importance))
+```
+
+```{r}
+single_cell_AD_100 <- single_cell_AD %>% slice(c(1:100))
+single_cell_AD_500 <- single_cell_AD %>% slice(c(1:500))
+single_cell_AD_1000 <- single_cell_AD %>% slice(c(1:1000))
+single_cell_AD_5000 <- single_cell_AD %>% slice(c(1:5000))
+single_cell_AD_10000 <- single_cell_AD %>% slice(c(1:10000))
+
+single_cell_MDD_100 <- single_cell_MDD %>% slice(c(1:100))
+single_cell_MDD_500 <- single_cell_MDD %>% slice(c(1:500))
+single_cell_MDD_1000 <- single_cell_MDD %>% slice(c(1:1000))
+single_cell_MDD_5000 <- single_cell_MDD %>% slice(c(1:5000))
+single_cell_MDD_10000 <- single_cell_MDD %>% slice(c(1:10000))
+```
+
+```{r}
+TFs <- c(network_AD$TF, network_MDD$TF, single_cell_AD$regulator, single_cell_MDD$regulator)
+TFs <- unique(TFs)
+target_genes <- c(network_AD$Target_gene, network_MDD$Target_gene, single_cell_AD$gene, single_cell_MDD$gene)
+target_genes <- unique(target_genes)
+```
+
+```{r}
+union_GT <- union_GT %>% filter(TF %in% TFs) %>% filter(Gene %in% target_genes)
+```
+
+
+Calculate precision and recall 
+```{r}
+func_PR <- function(ground_truth, network){
+  true_pos <- length(intersect(ground_truth$concat, network$concat))
+  precisions <- true_pos / dim(network)[1]
+  recalls <- true_pos / dim(ground_truth)[1]
+  return(c(precisions, recalls))
+}
+```
+
+```{r}
+PR_AD_100 <- func_PR(union_GT, network_AD_100)
+PR_AD_500 <- func_PR(union_GT, network_AD_500)
+PR_AD_1000 <- func_PR(union_GT, network_AD_1000)
+PR_AD_5000 <- func_PR(union_GT, network_AD_5000)
+PR_AD_10000 <- func_PR(union_GT, network_AD_10000)
+PR_AD_50000 <- func_PR(union_GT, network_AD_50000)
+PR_AD_100000 <- func_PR(union_GT, network_AD)
+PR_AD_150000 <- func_PR(union_GT, network_AD_150000)
+PR_AD_200000 <- func_PR(union_GT, network_AD_200000)
+```
+
+```{r}
+PR_MDD_100 <- func_PR(union_GT, network_MDD_100)
+PR_MDD_500 <- func_PR(union_GT, network_MDD_500)
+PR_MDD_1000 <- func_PR(union_GT, network_MDD_1000)
+PR_MDD_5000 <- func_PR(union_GT, network_MDD_5000)
+PR_MDD_10000 <- func_PR(union_GT, network_MDD_10000)
+PR_MDD_50000 <- func_PR(union_GT, network_MDD_50000)
+PR_MDD_100000 <- func_PR(union_GT, network_MDD)
+PR_MDD_150000 <- func_PR(union_GT, network_MDD_150000)
+PR_MDD_200000 <- func_PR(union_GT, network_MDD_200000)
+```
+
+```{r}
+PR_AD <- data.frame("Precision" = c(PR_AD_100[1], PR_AD_500[1], PR_AD_1000[1], PR_AD_5000[1],
+                                    PR_AD_10000[1], PR_AD_50000[1], PR_AD_100000[1], PR_AD_150000[1],
+                                    PR_AD_200000[1]),
+                    "Recall" = c(PR_AD_100[2], PR_AD_500[2], PR_AD_1000[2], PR_AD_5000[2],
+                                 PR_AD_10000[2], PR_AD_50000[2], PR_AD_100000[2], PR_AD_150000[2],
+                                 PR_AD_200000[2]),
+                    "cutoff" = c(100, 500, 1000, 5000, 10000, 50000, 100000, 150000, 200000))
+PR_MDD <- data.frame("Precision" = c(PR_MDD_100[1], PR_MDD_500[1], PR_MDD_1000[1], PR_MDD_5000[1],
+                                    PR_MDD_10000[1], PR_MDD_50000[1], PR_MDD_100000[1], PR_MDD_150000[1],
+                                    PR_MDD_200000[1]),
+                    "Recall" = c(PR_MDD_100[2], PR_MDD_500[2], PR_MDD_1000[2], PR_MDD_5000[2],
+                                    PR_MDD_10000[2], PR_MDD_50000[2], PR_MDD_100000[2], PR_MDD_150000[2],
+                                    PR_MDD_200000[2]),
+                    "cutoff" = c(100, 500, 1000, 5000, 10000, 50000, 100000, 150000, 200000))
+```
+
+```{r}
+options(scipen=200000)
+ggplot(PR_AD, aes(x = Recall, y = Precision)) +
+  geom_line(size = 1, colour = "grey30") +
+  geom_point() +
+  theme_classic() +
+  labs(title="Precision-recall AD consensus network") +
+  theme(text = element_text(size = 15)) +
+  geom_text(aes(label = cutoff, vjust = -0.4)) +
+  scale_x_continuous(limits = c(0, 0.015))
+```
+
+```{r}
+ggplot(PR_MDD, aes(x = Recall, y = Precision)) +
+  geom_line() +
+  geom_point() +
+  theme_classic() +
+  labs(title="Precision-recall MDD consensus network") +
+  theme(text = element_text(size = 15)) +
+  geom_text(aes(label = cutoff, vjust = -0.4)) 
+```
+
+```{r}
+PR_ADsc_100 <- func_PR(union_GT, single_cell_AD_100)
+PR_ADsc_500 <- func_PR(union_GT, single_cell_AD_500)
+PR_ADsc_1000 <- func_PR(union_GT, single_cell_AD_1000)
+PR_ADsc_5000 <- func_PR(union_GT, single_cell_AD_5000)
+PR_ADsc_10000 <- func_PR(union_GT, single_cell_AD_10000)
+PR_ADsc_full <- func_PR(union_GT, single_cell_AD)
+```
+
+```{r}
+PR_MDDsc_100 <- func_PR(union_GT, single_cell_MDD_100)
+PR_MDDsc_500 <- func_PR(union_GT, single_cell_MDD_500)
+PR_MDDsc_1000 <- func_PR(union_GT, single_cell_MDD_1000)
+PR_MDDsc_5000 <- func_PR(union_GT, single_cell_MDD_5000)
+PR_MDDsc_10000 <- func_PR(union_GT, single_cell_MDD_10000)
+PR_MDDsc_full <- func_PR(union_GT, single_cell_MDD)
+```
+
+```{r}
+PR_scAD <- data.frame("Precision" = c(PR_ADsc_100[1], PR_ADsc_500[1], PR_ADsc_1000[1], PR_ADsc_5000[1],
+                                    PR_ADsc_10000[1], PR_ADsc_full[1]),
+                    "Recall" = c(PR_ADsc_100[2], PR_ADsc_500[2], PR_ADsc_1000[2], PR_ADsc_5000[2],
+                                    PR_ADsc_10000[2], PR_ADsc_full[2]),
+                    "cutoff" = c(100, 500, 1000, 5000, 10000, 37070))
+PR_scMDD <- data.frame("Precision" = c(PR_MDDsc_100[1], PR_MDDsc_500[1], PR_MDDsc_1000[1], PR_MDDsc_5000[1],
+                                    PR_MDDsc_10000[1], PR_MDDsc_full[1]),
+                    "Recall" = c(PR_MDDsc_100[2], PR_MDDsc_500[2], PR_MDDsc_1000[2], PR_MDDsc_5000[2],
+                                    PR_MDDsc_10000[2], PR_MDDsc_full[2]),
+                    "cutoff" = c(100, 500, 1000, 5000, 10000, 22544))
+```
+
+```{r}
+ggplot(PR_scAD, aes(x = Recall, y = Precision)) +
+  geom_line() +
+  geom_point() +
+  theme_classic() +
+  labs(title="Precision-recall AD single-cell network") +
+  theme(text = element_text(size = 15)) +
+  geom_text(aes(label = cutoff, vjust = -0.4))
+```
+
+```{r}
+ggplot(PR_scMDD, aes(x = Recall, y = Precision)) +
+  geom_line() +
+  geom_point() +
+  theme_classic() +
+  labs(title="Precision-recall MDD single-cell network") +
+  theme(text = element_text(size = 15)) +
+  geom_text(aes(label = cutoff, vjust = -0.4))
+```
+
