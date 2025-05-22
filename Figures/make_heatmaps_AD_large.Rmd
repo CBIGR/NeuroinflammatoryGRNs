@@ -1,0 +1,726 @@
+---
+title: "Post processing of SCENIC analysis on AD dataset - old runs made by Joke"
+output: html_notebook
+---
+
+Load libraries: 
+
+```{r message=FALSE}
+library("SingleCellExperiment")
+library("SCENIC")
+library("BBmisc")
+library("SCopeLoomR")
+library("Seurat")
+library("dplyr")
+library("readr")
+library("ggplot2")
+library("openxlsx")
+library("circlize")
+library("RColorBrewer")
+library("magick")
+library("ComplexHeatmap")
+library("VennDiagram")
+library("dendextend")
+```
+
+Create Directories: 
+```{r}
+out_dir = "~/Desktop/rebuttal_Hanne/"
+setwd(out_dir)
+dir.create(paste0(out_dir, "Figures/"))
+dir.create(paste0(out_dir, "Tables/"))
+```
+
+Set directory for output: 
+```{r}
+fig_dir <- paste0(out_dir, "Figures/")
+table_dir <- paste0(out_dir, "Tables/")
+```
+
+Import metadata: 
+```{r}
+metaData = read.table("Tables/snRNA_metadta.csv", header = T, sep = ",", row.names = 1)
+head(metaData)
+```
+
+
+Read SCENIC output from loom file:
+```{r}
+#for some reason paths only work when absolute
+loom <- open_loom(file = "~/Desktop/rebuttal_Hanne/SCENIC_output_AD_large.loom")
+ps_cells <- get_cell_ids(loom)
+regulonAUC <- get_regulons_AUC(loom)
+thresholds <- get_regulon_thresholds(loom)
+regulons_incidMat <- get_regulons(loom)
+regulons <- regulonsToGeneLists(regulons_incidMat)
+close_loom(loom)
+```
+
+```{r}
+# Create edge list
+
+edges <- data.frame(unlist(regulons))
+edges$TFs <- unlist(lapply(strsplit(row.names(edges), "_"), "[", 1))
+write.csv( edges, paste0(table_dir, "Edges_AD_large.csv"), quote = F)
+```
+
+```{r}
+# Create edge list restricted for DEGs
+
+degs <- readr::read_csv("Tables/diff_exp_celltypes_ADvsC.csv")
+head(degs)
+```
+
+
+
+```{r}
+edges_degs<-edges[edges$unlist.regulons. %in% degs[startsWith(degs$celltype, "MG"), ]$genes ,] # for microglia
+dim(edges_degs)
+```
+
+```{r}
+# Rank TFs by degree
+
+degree_tfs <- table(edges_degs$TFs)
+degree_tfs <- sort(degree_tfs, decreasing = T)
+head(degree_tfs)
+```
+
+```{r}
+# Make rank plot
+
+df_plot <- data.frame(degree_tfs)
+df_plot$Rank <- 1:nrow(df_plot)
+colnames(df_plot)[1:2] <- c("TF", "Degree")
+df_plot
+```
+
+```{r}
+ggplot(df_plot, aes(x=Rank, y=Degree)) +
+  geom_point() +
+  # geom_text(aes(label=ifelse(Count<=5,as.character(TF),'')),hjust=-0.2,vjust=0) +
+  ggrepel::geom_label_repel(aes(label=ifelse(Rank<=10,as.character(TF),'')),
+                  box.padding   = 0.35, 
+                  point.padding = 0.5,
+                  nudge_x = 2,
+                  segment.color = 'grey50') +
+  theme_bw() +
+  ggtitle("Degree of TFs regulating DEGs in AD vs control")
+
+ggsave(paste0(fig_dir, "AD_GRN_fromDEGs_MG_degreeRankPlot.png"))
+ggsave(paste0(fig_dir, "AD_GRN_fromDEGs_MG_degreeRankPlot.svg"))
+```
+
+```{r}
+# Repeat for all DEGs
+edges_degs<-edges[edges$unlist.regulons. %in% degs[startsWith(degs$celltype, "MG"), ]$genes ,] 
+dim(edges_degs)
+```
+
+```{r}
+# Rank TFs by degree
+
+degree_tfs <- table(edges_degs$TFs)
+degree_tfs <- sort(degree_tfs, decreasing = T)
+head(degree_tfs)
+```
+
+```{r}
+# Make rank plot
+
+df_plot <- data.frame(degree_tfs)
+df_plot$Rank <- 1:nrow(df_plot)
+colnames(df_plot)[1:2] <- c("TF", "Degree")
+df_plot
+```
+
+```{r}
+# Export table for CRCs
+
+crc_tfs <- c("IKZF1", "IRF8", "NFATC2", "MAF", "RUNX1", "TAL1", "SPI1", "MAFF", "STAT3", "MYC", "FOS", "JUNB", "CEBPD", "PLSCR1")
+
+write.csv(df_plot[df_plot$TF %in% crc_tfs,], paste0(table_dir, "AD_GRN_fromDEGs_ALL_degreeRanks_CRCs.csv"), row.names = F, quote = F)
+```
+
+
+```{r}
+ggplot(df_plot, aes(x=Rank, y=Degree)) +
+  geom_point() +
+  # geom_text(aes(label=ifelse(Count<=5,as.character(TF),'')),hjust=-0.2,vjust=0) +
+  ggrepel::geom_label_repel(aes(label=ifelse(Rank<=20,as.character(TF),'')),
+                  box.padding   = 0.35, 
+                  point.padding = 0.5,
+                  nudge_x = 2,
+                  segment.color = 'grey50', 
+                  max.overlaps = Inf) +
+  theme_bw() +
+  ggtitle("Degree of TFs regulating DEGs in AD vs control - all cells")
+
+ggsave(paste0(fig_dir, "AD_GRN_fromDEGs_ALL_degreeRankPlot.png"))
+ggsave(paste0(fig_dir, "AD_GRN_fromDEGs_ALL_degreeRankPlot.svg"))
+```
+
+
+```{r}
+# - converted to . in SCENIC analysis, convert metadata as well
+
+row.names(metaData) <- gsub("-", "\\.", row.names(metaData))
+head(metaData)
+
+dim(metaData)
+metaData <- metaData[ps_cells, ]
+dim(metaData)
+```
+
+
+First checkpoint for evaluating the outcome of SCENIC: did it find regulons?
+```{r}
+dim(regulonAUC)
+length(thresholds)
+length(regulons)
+```
+
+```{r}
+head(regulonAUC)
+head(thresholds)
+```
+
+Save regulon matrix
+```{r}
+toExport<-as.data.frame(t(regulons_incidMat), stringsAsFactors=F)
+toExport$gene<-rownames(toExport)
+toExport<-toExport[,c('gene',setdiff(colnames(toExport),"gene"))]
+tmpList<-list(toExport)
+names(tmpList)<-"regulonMatrix"
+write.xlsx(tmpList,paste0(table_dir, "tableRegulons_AD_large.xlsx"))
+```
+
+
+FIX THRESHOLDS: names and values switched in output. pySCENIC/loom bug?
+
+```{r}
+thresholds_values <- names(thresholds)
+thresholds_names <- thresholds
+thresholds <- thresholds_values
+names(thresholds) <- thresholds_names
+length(thresholds)
+length(regulons)
+head(thresholds)
+```
+
+Normally the thresholds and regulons should have the same dimensions: I will filter the regulons not in common out
+
+```{r}
+sum(names(regulons) %in% names(thresholds))
+which(names(thresholds) %in% names(regulons)) 
+thresholds <- thresholds[which(names(thresholds) %in% names(regulons))]
+length(thresholds)
+length(regulons)
+head(thresholds)
+```
+
+Get AUC values in matrix + scale to range 0-1 for nicer heatmaps
+
+```{r}
+AUCdata <- getAUC(regulonAUC) %>% BBmisc::normalize("range") #by default, operates on rows (regulons)
+dim(AUCdata)
+AUCdata[1:5,1:5]
+```
+
+# Define regulons per cell
+
+```{r}
+regulonsCells <- setNames(lapply(names(thresholds), 
+                                 function(x) {
+                                   trh <- thresholds[x]
+                                   names(which(getAUC(regulonAUC)[x,]>trh))
+                                 }),names(thresholds))
+
+length(regulonsCells)
+
+
+regulonActivity <- reshape2::melt(regulonsCells)
+head(regulonActivity)
+```
+
+
+# Create binary activity (regulon On or Off based on thresholds)
+
+```{r}
+binaryRegulonActivity <- t(table(regulonActivity[,1], regulonActivity[,2])) #table can also build matrices
+class(binaryRegulonActivity) <- "matrix"
+dim(binaryRegulonActivity)
+binaryRegulonActivity[1:5,1:5]
+```
+
+
+# Only non-duplicated regulons
+
+```{r}
+if (sum(duplicated(rownames(binaryRegulonActivity))) != 0){
+  
+  binaryRegulonActivity_nonDupl <- binaryRegulonActivity[which(rownames(binaryRegulonActivity) %in% onlyNonDuplicatedExtended(rownames(binaryRegulonActivity))),]
+  dim(binaryRegulonActivity_nonDupl)
+  
+} else {
+  print("No duplicated regulons... Results from RegulonActivity_nonDupl and binaryRegulonActivity will be the same")
+  binaryRegulonActivity_nonDupl = binaryRegulonActivity
+}
+
+```
+
+# Get minimum cells
+
+I lowered the amount of minamal cells where a regulon is active in this case, it would be 143 cells. Which is probably too high. 
+
+```{r}
+minCells <- ncol(binaryRegulonActivity) * .001 # 1% cells
+```
+
+### All regulons
+
+```{r}
+regulonSelection <- list()
+regulonSelection[["All_regulons_with_duplicated"]] <- rownames(binaryRegulonActivity)
+length(rownames(binaryRegulonActivity))
+```
+
+### Active in > 1% cells
+
+The binary activity is one ("on") in more than 1% of the cells for this regulon. 
+FROM the supplementary in the SCENIC paper : "For example, in Fig. 1b, we have plotted only regulons active in at least 1% of the cells and correlated with other regulons in the matrix (absolute correlation > 0.30). However, the downstream analyses include all the regulons.
+
+```{r}
+regMinCells <- names(which(rowSums(binaryRegulonActivity_nonDupl) > minCells))
+regulonSelection[["Regs_active_morethan_1perc_cells"]] <- regMinCells
+length(regMinCells)
+```
+
+### Correlation between regulons
+```{r}
+reguCor <- cor(t(binaryRegulonActivity_nonDupl[regMinCells,]))
+diag(reguCor) <- 0
+nrow(reguCor)
+```
+
+
+### Regulons correlated with other regulons and active in > 1% cells
+
+```{r}
+corrRegs <- names(which(rowSums(abs(reguCor) > 0.3) > 0)) 
+regulonSelection[["Regs_active_and_corr_0.3"]]  <- corrRegs
+length(corrRegs)
+```
+
+```{r}
+#Extra: add corr>0.5
+corrRegs_05 <- names(which(rowSums(abs(reguCor) > 0.5) > 0)) 
+regulonSelection[["Regs_active_and_corr_0.5"]]  <- corrRegs_05
+length(corrRegs_05)
+```
+
+
+
+### Regulons NOT correlated with other regulons and/or active in < 1% cells
+
+```{r}
+missingRegs <- rownames(binaryRegulonActivity_nonDupl)[which(!rownames(binaryRegulonActivity_nonDupl) %in% corrRegs)]
+regulonSelection[["Regs_inactive_or_noncorr"]]  <- missingRegs
+length(missingRegs)
+```
+
+
+```{r}
+# Save so you can also run plots on HPC
+
+saveRDS(AUCdata,"Tables/AUCdata_AD_large.rds")
+saveRDS(regulonSelection, "Tables/RegSelections_AD_large.rds")
+```
+
+
+## Prepare plots
+
+### UMAP
+
+```{r}
+p1<-ggplot(metaData, aes(UMAP_1, UMAP_2, color=celltype)) +
+ geom_point(size=0.05) +
+  theme_bw()
+
+metaData<- cbind(metaData, t(AUCdata[regulonSelection[['Regs_active_and_corr_0.5']],row.names(metaData)]))
+
+p2 <- ggplot(metaData, aes(UMAP_1, UMAP_2, color=`IRF8_(+)-motif`)) +
+ geom_point(size=0.05) +
+ scale_color_gradient2(low="blue", mid = "white", high="red", midpoint=0.5, space="Lab") +
+  theme_bw()
+
+p1 + p2
+```
+
+### Heatmaps
+
+#### Aggregated heatmaps: cell types as groups
+
+```{r}
+v <- metaData$celltype
+names(v) <- row.names(metaData)
+idents <- sort(v)
+ordered <- names(idents)
+
+nrClust <- length(levels(as.factor(v)))
+nrClust
+```
+
+
+```{r}
+colors <- c("#ED8141")
+colors <- colorRampPalette(colors)(nrClust)
+names(colors) <- unique(metaData$celltype)
+colors <- list(idents = colors)
+
+tables <- table(v)
+names(tables) <- NULL
+```
+
+
+### Setting gaps
+
+```{r}
+gaps <- tables[1]
+for (k in 1:nrClust) { #add values together
+  value <- tables[k]
+  gaps <- append(gaps, value+gaps[k-1])
+}
+
+
+for (i in seq_len(length(regulonSelection))) {
+  selRegs <- names(regulonSelection)[i]
+  if(length(regulonSelection[[selRegs]])>1) {
+    
+    AUCMat <- AUCdata[regulonSelection[[selRegs]], ,drop=FALSE]
+    AUCMat <- AUCMat[,ordered]
+    
+    avg_exp_df <- data.frame(row.names = regulonSelection[[selRegs]]) #Create empty dataframe
+    
+    for (j in levels(as.factor(v))) {
+      AUCMatTmp <- AUCMat[,names(as.factor(v)[which(v==j)])] #Subset for cell population
+      AUCMatTmp <- as.matrix(AUCMatTmp)
+      
+      if (dim(AUCMatTmp)[2] == 1) {
+        average_expressions <- AUCMatTmp
+      } else {
+        average_expressions <- apply(AUCMatTmp, 1, function(x){ #apply across row: average activity in regulon for that cell pop
+          sum(x)/length(colnames(AUCMatTmp))
+        })
+      }
+      
+      average_expressions <- as.numeric(average_expressions)
+      avg_exp_df[,j] <- average_expressions
+    }
+    
+    names(avg_exp_df) <- levels(as.factor(v))
+    AUCMatT <- avg_exp_df
+    
+    p <- pheatmap(as.matrix(AUCMatT), cluster_cols = F, cluster_rows = F, scale = "none", 
+                  main = selRegs, treeheight_row = 0, 
+                  cellwidth = 10, cellheight = 10, 
+                  show_colnames = T, border_color = "black",
+                  fontsize_row = 4, fontsize_col = 4, angle_col = "315")
+    
+    file_name <- paste0(fig_dir, "Heatmap_AUCRegulons_Averaged_", selRegs ,"_ADlarge.pdf")
+    
+    p.height <- 1 + 0.15 * length(rownames(AUCMatT))
+    
+    pdf(file = file_name, 
+        width = 10, 
+        height = p.height, 
+    ) 
+    
+    draw(p, merge_legend = T)
+    
+    dev.off()
+  }
+}
+
+```
+
+#### Aggregated heatmaps: diagnosis as group
+
+```{r}
+v <- metaData$Diagnosis
+names(v) <- row.names(metaData)
+idents <- sort(v)
+ordered <- names(idents)
+
+nrClust <- length(levels(as.factor(v)))
+nrClust
+```
+
+
+```{r}
+colors <- c("#ED8141")
+colors <- colorRampPalette(colors)(nrClust)
+names(colors) <- unique(metaData$Diagnosis)
+colors <- list(idents = colors)
+
+tables <- table(v)
+names(tables) <- NULL
+```
+
+
+### Setting gaps
+
+```{r}
+gaps <- tables[1]
+for (k in 1:nrClust) { #add values together
+  value <- tables[k]
+  gaps <- append(gaps, value+gaps[k-1])
+}
+
+
+for (i in seq_len(length(regulonSelection))) {
+  selRegs <- names(regulonSelection)[i]
+  if(length(regulonSelection[[selRegs]])>1) {
+    
+    AUCMat <- AUCdata[regulonSelection[[selRegs]], ,drop=FALSE]
+    AUCMat <- AUCMat[,ordered]
+    
+    avg_exp_df <- data.frame(row.names = regulonSelection[[selRegs]]) #Create empty dataframe
+    
+    for (j in levels(as.factor(v))) {
+      AUCMatTmp <- AUCMat[,names(as.factor(v)[which(v==j)])] #Subset for cell population
+      AUCMatTmp <- as.matrix(AUCMatTmp)
+      
+      if (dim(AUCMatTmp)[2] == 1) {
+        average_expressions <- AUCMatTmp
+      } else {
+        average_expressions <- apply(AUCMatTmp, 1, function(x){ #apply across row: average activity in regulon for that cell pop
+          sum(x)/length(colnames(AUCMatTmp))
+        })
+      }
+      
+      average_expressions <- as.numeric(average_expressions)
+      avg_exp_df[,j] <- average_expressions
+    }
+    
+    names(avg_exp_df) <- levels(as.factor(v))
+    AUCMatT <- avg_exp_df
+    
+    p <- pheatmap(as.matrix(AUCMatT), cluster_cols = F, cluster_rows = F, scale = "none", 
+                  main = selRegs, treeheight_row = 0, 
+                  cellwidth = 10, cellheight = 10, 
+                  show_colnames = T, border_color = "black",
+                  fontsize_row = 4, fontsize_col = 4, angle_col = "315")
+    
+    file_name <- paste0(fig_dir, "Heatmap_AUCRegulons_Averaged_Diagnosis_", selRegs ,"_ADlarge.pdf")
+    
+    p.height <- 1 + 0.15 * length(rownames(AUCMatT))
+    
+    pdf(file = file_name, 
+        width = 10, 
+        height = p.height, 
+    ) 
+    
+    draw(p, merge_legend = T)
+    
+    dev.off()
+  }
+}
+
+```
+
+#### Complex heatmap
+
+Create annotations for ComplexHeatmap
+```{r}
+cols_celltype <- brewer.pal(length(levels(as.factor(metaData$celltype))), "Set1")
+names(cols_celltype) <- levels(as.factor(metaData$celltype))
+
+col_ann_types = columnAnnotation( Celltype = metaData[colnames(AUCdata), 'celltype'], show_legend = T, annotation_legend_param = list(Celltype = list(title = "Celltype")),
+                            show_annotation_name = T, annotation_label = "Celltype", 
+                            col = list(Celltype = cols_celltype))
+```
+
+
+```{r}
+cols_diagnosis <- brewer.pal(length(levels(as.factor(metaData$Diagnosis))), "Set2")[c(2,1)]
+names(cols_diagnosis) <- levels(as.factor(metaData$Diagnosis))
+
+col_ann_diag = columnAnnotation( Diagnosis = metaData[colnames(AUCdata), 'Diagnosis'], show_legend = T, annotation_legend_param = list(Diagnosis = list(title = "Diagnosis")),
+                            show_annotation_name = T, annotation_label = "Diagnosis", 
+                            col = list(Diagnosis = cols_diagnosis))
+
+```
+
+
+```{r}
+for(i in seq_len(length(regulonSelection))){ 
+  
+  message("Print heatmap ",i)
+  selRegs <- names(regulonSelection)[i]
+  
+  if(length(regulonSelection[[selRegs]])>1) {
+    
+    AUCMat <- AUCdata[regulonSelection[[selRegs]],,drop=FALSE]
+
+    col_fun = colorRamp2(c(0, 0.5, 1), c("steelblue3", "#FFFFBF", "#D73027")) 
+    col_fun(seq(-50, 50))
+    
+    hm <- Heatmap(AUCMat, show_column_names = FALSE, name="AUCell score", 
+                    clustering_distance_rows = "euclidean", 
+                    clustering_distance_columns = "euclidean", 
+                    clustering_method_rows = "ward.D", 
+                    clustering_method_columns = "ward.D", 
+                    column_dend_height = unit(1.5, "cm"), row_dend_width = unit(1.5, "cm"), 
+                    width = unit(15, "cm"), height = unit((0.07*dim(AUCMat)[1]), "cm"), 
+                    row_names_gp = gpar(fontsize = 2), column_names_gp = gpar(fontsize = 1),
+                    col=col_fun, top_annotation = c(col_ann_types, col_ann_diag)
+    )
+    
+    pdf(paste0(fig_dir, "RegulonActivity_Heatmap_",selRegs,"_ComplexHeatmap_ADlarge.pdf"), width=12.45, height=17.55)
+    draw(hm, merge_legend = TRUE)  
+    dev.off()
+    
+    
+  }
+}
+```
+
+
+## Test TFs of interest
+
+```{r}
+AUCdata <- readRDS("Tables/AUCdata_AD_large.rds")
+dim(AUCdata)
+```
+
+
+```{r}
+#test
+
+AUCdata <- assay(regulonAUC)[1,]
+for (i in 2:nrow(regulonAUC)) {
+  AUCdata <- rbind(AUCdata, assay(regulonAUC)[i,])
+}
+
+row.names(AUCdata) <- row.names(regulonAUC)
+colnames(AUCdata) <- gsub("\\.", "-", colnames(AUCdata))
+dim(AUCdata)
+```
+
+
+
+```{r}
+metaData <- metaData[colnames(AUCdata),]
+metaData <- cbind(metaData, t(AUCdata))
+metaData
+```
+
+```{r}
+ggplot(metaData, aes(x=Diagnosis, y=`IRF8_(+)-motif`, fill=Diagnosis)) +
+  geom_violin() + 
+  theme_bw()
+```
+Create Seurat object for for convenience in plotting
+
+```{r}
+library(Seurat)
+regdata <- t(metaData[,- (1:9)])
+row.names(regdata) <- substr(row.names(regdata), 1, nchar(row.names(regdata)) - 10 )
+
+so <- CreateSeuratObject(regdata, assay = "Regulons", meta.data = metaData[,1:5])
+so
+```
+
+
+
+```{r}
+RidgePlot(so, features = c("IKZF1", "IRF8", "NFATC2", "MAF", "RUNX1", "TAL1", "SPI1", "MAFF", "STAT3", "MYC", "FOS", "JUNB", "CEBPD", "PLSCR1"), ncol = 3, group.by = "Diagnosis")
+```
+
+```{r}
+library(presto)
+```
+
+```{r}
+### Focus tests on MICORGLIA and save results
+wilc<- wilcoxauc(so, group_by = "Diagnosis", seurat_assay = "Regulons", assay = "counts")
+head(wilc)
+```
+
+
+```{r}
+# Subset to microglia
+
+so@meta.data<- metaData[,1:9]
+
+so <- SetIdent(so, value="celltype")
+
+so_sub <- subset(so, idents="MG")
+so_sub
+```
+
+```{r}
+wilc_mg<- wilcoxauc(so_sub, group_by = "Diagnosis", seurat_assay = "Regulons", assay = "counts")
+head(wilc_mg)
+```
+
+```{r}
+wilc_mg <- wilc_mg[wilc_mg$group == "AD" & wilc_mg$padj < 0.05,]
+write.csv(wilc_mg[order(wilc_mg$logFC, decreasing = T),], paste0(table_dir, "TestWilc_MG_ADDlarge.csv"), quote = F)
+```
+
+
+```{r}
+tfs_oi <- c("IKZF1", "IRF8", "NFATC2", "MAF", "RUNX1", "TAL1", "SPI1", "MAFF", "STAT3", "MYC", "FOS", "JUNB", "CEBPD", "PLSCR1")
+
+wilc[wilc$feature %in% tfs_oi, ]
+```
+
+```{r}
+wilc[order(wilc$logFC, decreasing = T),]
+```
+
+```{r}
+VlnPlot(so, features = tfs_oi, split.by = "Diagnosis")
+```
+
+```{r}
+tfs_oi <- c(paste0(tfs_oi, "_(+)-motif"))
+selec_tfs <- tfs_oi[tfs_oi %in% colnames(metaData)]
+
+df_plot <- metaData[, c(selec_tfs, "Diagnosis") ]
+head(df_plot)
+```
+
+```{r}
+df_plot$Cell <- row.names(df_plot)
+df_plot <- melt(df_plot)
+colnames(df_plot)[3:4] <- c("Regulon", "Activity")
+head(df_plot)
+```
+
+```{r}
+ggplot(df_plot, aes(x=Regulon, y=Activity, fill=Diagnosis)) +
+  geom_boxplot(outlier.size = 0.5) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+
+ggsave(paste0(fig_dir, "Boxplot_ADlarge_TFsOI_byCondition.png"))
+ggsave(paste0(fig_dir, "Boxplot_ADlarge_TFsOI_byCondition.svg"))
+ggsave(paste0(fig_dir, "Boxplot_ADlarge_TFsOI_byCondition.pdf"))
+```
+
+```{r}
+for (ct in levels(as.factor(metaData$celltype))){
+  p<- ggplot(df_plot[df_plot$Cell %in% row.names(metaData[metaData$celltype == ct,]), ], aes(x=Regulon, y=Activity, fill=Diagnosis)) +
+    geom_boxplot(outlier.size = 0.5) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+  
+  ggsave(paste0(fig_dir, "Boxplot_ADlarge_TFsOI_", ct,"_byCondition.png"), p)
+  ggsave(paste0(fig_dir, "Boxplot_ADlarge_TFsOI_", ct,"_byCondition.svg"), p)
+  ggsave(paste0(fig_dir, "Boxplot_ADlarge_TFsOI_", ct,"_byCondition.pdf"), p)
+}
+```
+

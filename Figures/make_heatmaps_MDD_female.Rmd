@@ -1,0 +1,382 @@
+---
+title: "Post processing of SCENIC analysis on MDD female dataset"
+output: html_notebook
+---
+
+Load libraries: 
+
+```{r message=FALSE}
+library("SingleCellExperiment")
+library("SCENIC")
+library("BBmisc")
+library("SCopeLoomR")
+library("Seurat")
+library("dplyr")
+library("readr")
+library("ggplot2")
+library("openxlsx")
+library("circlize")
+library("RColorBrewer")
+library("magick")
+library("ComplexHeatmap")
+library("VennDiagram")
+library("dendextend")
+```
+
+Create Directories: 
+```{r}
+out_dir = "~/Desktop/rebuttal_Hanne/"
+setwd(out_dir)
+dir.create(paste0(out_dir, "Figures/"))
+dir.create(paste0(out_dir, "Tables/"))
+```
+
+Set directory for output: 
+```{r}
+fig_dir <- paste0(out_dir, "Figures/")
+table_dir <- paste0(out_dir, "Tables/")
+```
+
+Import metadata: 
+```{r}
+metaData = read.table("Tables/MDD_M_F_metadata.csv", header = T, sep = ",", row.names = 1)
+head(metaData)
+```
+
+
+Read SCENIC output from loom file:
+```{r}
+#for some reason paths only work when absolute
+loom <- open_loom(file = "~/Desktop/rebuttal_Hanne/SCENIC_output_MDD_female.loom")
+ps_cells <- get_cell_ids(loom)
+regulonAUC <- get_regulons_AUC(loom)
+thresholds <- get_regulon_thresholds(loom)
+regulons_incidMat <- get_regulons(loom)
+regulons <- regulonsToGeneLists(regulons_incidMat)
+close_loom(loom)
+```
+
+
+```{r}
+# Subset metadata to cells -> here metaData has differently names Microglia, but the cell types are already part of the cell prefixes so I will use those for the Microglia
+
+row.names(metaData) <- ifelse(
+  startsWith(row.names(metaData), "Micro"), 
+  gsub("Micro/Macro", "Micro.Macro", row.names(metaData)), 
+  row.names(metaData)
+)
+
+metaData <- metaData[ps_cells,]
+dim(metaData)
+```
+
+
+
+First checkpoint for evaluating the outcome of SCENIC: did it find regulons?
+```{r}
+dim(regulonAUC)
+length(thresholds)
+length(regulons)
+```
+
+```{r}
+head(regulonAUC)
+head(thresholds)
+```
+
+Save regulon matrix
+```{r}
+toExport<-as.data.frame(t(regulons_incidMat), stringsAsFactors=F)
+toExport$gene<-rownames(toExport)
+toExport<-toExport[,c('gene',setdiff(colnames(toExport),"gene"))]
+tmpList<-list(toExport)
+names(tmpList)<-"regulonMatrix"
+write.xlsx(tmpList,paste0(table_dir, "tableRegulons_MDD.xlsx"))
+```
+
+
+FIX THRESHOLDS: names and values switched in output. pySCENIC/loom bug?
+
+```{r}
+thresholds_values <- names(thresholds)
+thresholds_names <- thresholds
+thresholds <- thresholds_values
+names(thresholds) <- thresholds_names
+length(thresholds)
+length(regulons)
+head(thresholds)
+```
+
+Normally the thresholds and regulons should have the same dimensions: I will filter the regulons not in common out
+
+```{r}
+sum(names(regulons) %in% names(thresholds))
+which(names(thresholds) %in% names(regulons)) 
+thresholds <- thresholds[which(names(thresholds) %in% names(regulons))]
+length(thresholds)
+length(regulons)
+head(thresholds)
+```
+
+Get AUC values in matrix + scale to range 0-1 for nicer heatmaps
+
+```{r}
+AUCdata <- getAUC(regulonAUC) %>% BBmisc::normalize("range") #by default, operates on rows (regulons)
+dim(AUCdata)
+AUCdata[1:5,1:5]
+```
+
+# Define regulons per cell
+
+```{r}
+regulonsCells <- setNames(lapply(names(thresholds), 
+                                 function(x) {
+                                   trh <- thresholds[x]
+                                   names(which(getAUC(regulonAUC)[x,]>trh))
+                                 }),names(thresholds))
+
+length(regulonsCells)
+
+
+regulonActivity <- reshape2::melt(regulonsCells)
+head(regulonActivity)
+```
+
+
+# Create binary activity (regulon On or Off based on thresholds)
+
+```{r}
+binaryRegulonActivity <- t(table(regulonActivity[,1], regulonActivity[,2])) #table can also build matrices
+class(binaryRegulonActivity) <- "matrix"
+dim(binaryRegulonActivity)
+binaryRegulonActivity[1:5,1:5]
+```
+
+
+# Only non-duplicated regulons
+
+```{r}
+if (sum(duplicated(rownames(binaryRegulonActivity))) != 0){
+  
+  binaryRegulonActivity_nonDupl <- binaryRegulonActivity[which(rownames(binaryRegulonActivity) %in% onlyNonDuplicatedExtended(rownames(binaryRegulonActivity))),]
+  dim(binaryRegulonActivity_nonDupl)
+  
+} else {
+  print("No duplicated regulons... Results from RegulonActivity_nonDupl and binaryRegulonActivity will be the same")
+  binaryRegulonActivity_nonDupl = binaryRegulonActivity
+}
+
+```
+
+
+# Create set of CRCs
+
+```{r}
+regulonSelection <- list()
+regulonSelection[["CRCs"]] <- c("IKZF1", "IRF8", "NFATC2", "MAF", "RUNX1", "TAL1", "SPI1", "MAFF", "STAT3", "MYC", "FOS", "JUNB", "CEBPD", "PLSCR1")
+regulonSelection[["CRCs"]] <- paste0(regulonSelection[["CRCs"]], "_(+)-motif")
+regulonSelection[["CRCs"]] <- names(regulons)[names(regulons) %in% regulonSelection[["CRCs"]]]
+regulonSelection[["CRCs"]]
+```
+
+
+# Get minimum cells
+
+I lowered the amount of minamal cells where a regulon is active in this case, it would be 143 cells. Which is probably too high. 
+
+```{r}
+minCells <- ncol(binaryRegulonActivity) * .001 # 1% cells
+```
+
+### All regulons
+
+```{r}
+regulonSelection[["All_regulons_with_duplicated"]] <- rownames(binaryRegulonActivity)
+length(rownames(binaryRegulonActivity))
+```
+
+### Active in > 1% cells
+
+The binary activity is one ("on") in more than 1% of the cells for this regulon. 
+FROM the supplementary in the SCENIC paper : "For example, in Fig. 1b, we have plotted only regulons active in at least 1% of the cells and correlated with other regulons in the matrix (absolute correlation > 0.30). However, the downstream analyses include all the regulons.
+
+```{r}
+regMinCells <- names(which(rowSums(binaryRegulonActivity_nonDupl) > minCells))
+regulonSelection[["Regs_active_morethan_1perc_cells"]] <- regMinCells
+length(regMinCells)
+```
+
+### Correlation between regulons
+```{r}
+reguCor <- cor(t(binaryRegulonActivity_nonDupl[regMinCells,]))
+diag(reguCor) <- 0
+nrow(reguCor)
+```
+
+
+### Regulons correlated with other regulons and active in > 1% cells
+
+```{r}
+corrRegs <- names(which(rowSums(abs(reguCor) > 0.3) > 0)) 
+regulonSelection[["Regs_active_and_corr_0.3"]]  <- corrRegs
+length(corrRegs)
+```
+
+```{r}
+#Extra: add corr>0.5
+corrRegs_05 <- names(which(rowSums(abs(reguCor) > 0.5) > 0)) 
+regulonSelection[["Regs_active_and_corr_0.5"]]  <- corrRegs_05
+length(corrRegs_05)
+```
+
+
+
+### Regulons NOT correlated with other regulons and/or active in < 1% cells
+
+```{r}
+missingRegs <- rownames(binaryRegulonActivity_nonDupl)[which(!rownames(binaryRegulonActivity_nonDupl) %in% corrRegs)]
+regulonSelection[["Regs_inactive_or_noncorr"]]  <- missingRegs
+length(missingRegs)
+```
+
+## Aggregated heatmaps
+
+# Heatmaps
+
+```{r}
+v <- metaData$Celltype
+names(v) <- row.names(metaData)
+idents <- sort(v)
+ordered <- names(idents)
+
+nrClust <- length(levels(as.factor(v)))
+nrClust
+```
+
+
+```{r}
+colors <- c("#ED8141")
+colors <- colorRampPalette(colors)(nrClust)
+names(colors) <- unique(metaData$Celltype)
+colors <- list(idents = colors)
+
+tables <- table(v)
+names(tables) <- NULL
+```
+
+
+### Setting gaps
+
+```{r}
+gaps <- tables[1]
+for (k in 1:nrClust) { #add values together
+  value <- tables[k]
+  gaps <- append(gaps, value+gaps[k-1])
+}
+
+
+for (i in seq_len(length(regulonSelection))) {
+  selRegs <- names(regulonSelection)[i]
+  if(length(regulonSelection[[selRegs]])>1) {
+    
+    AUCMat <- AUCdata[regulonSelection[[selRegs]], ,drop=FALSE]
+    AUCMat <- AUCMat[,ordered]
+    
+    avg_exp_df <- data.frame(row.names = regulonSelection[[selRegs]]) #Create empty dataframe
+    
+    for (j in levels(as.factor(v))) {
+      AUCMatTmp <- AUCMat[,names(as.factor(v)[which(v==j)])] #Subset for cell population
+      AUCMatTmp <- as.matrix(AUCMatTmp)
+      
+      if (dim(AUCMatTmp)[2] == 1) {
+        average_expressions <- AUCMatTmp
+      } else {
+        average_expressions <- apply(AUCMatTmp, 1, function(x){ #apply across row: average activity in regulon for that cell pop
+          sum(x)/length(colnames(AUCMatTmp))
+        })
+      }
+      
+      average_expressions <- as.numeric(average_expressions)
+      avg_exp_df[,j] <- average_expressions
+    }
+    
+    names(avg_exp_df) <- levels(as.factor(v))
+    AUCMatT <- avg_exp_df
+    
+    p <- pheatmap(as.matrix(AUCMatT), cluster_cols = F, cluster_rows = F, scale = "none", 
+                  main = selRegs, treeheight_row = 0, 
+                  cellwidth = 10, cellheight = 10, 
+                  show_colnames = T, border_color = "black",
+                  fontsize_row = 4, fontsize_col = 4, angle_col = "315")
+    
+    file_name <- paste0(fig_dir, "Heatmap_AUCRegulons_Averaged_", selRegs ,"_MDD_F.pdf")
+    
+    p.height <- 1 + 0.15 * length(rownames(AUCMatT))
+    
+    pdf(file = file_name, 
+        width = 10, 
+        height = p.height, 
+    ) 
+    
+    draw(p, merge_legend = T)
+    
+    dev.off()
+  }
+}
+
+```
+
+
+## Heatmaps with ComplexHeatmap
+
+### Create annotations
+
+
+```{r}
+cols_celltype <- brewer.pal(length(levels(as.factor(metaData$Celltype))), "Set1")
+names(cols_celltype) <- levels(as.factor(metaData$Celltype))
+
+col_ann_types = columnAnnotation( Celltype = metaData[colnames(AUCdata), 'Celltype'], show_legend = T, annotation_legend_param = list(Celltype = list(title = "Celltype")),
+                            show_annotation_name = T, annotation_label = "Celltype", 
+                            col = list(Celltype = cols_celltype))
+```
+
+
+```{r}
+for(i in seq_len(length(regulonSelection))){ 
+  
+  selRegs <- names(regulonSelection)[i]
+  
+  if (selRegs == "CRCs"){
+    next
+  }
+  
+  if(length(regulonSelection[[selRegs]])>1) {
+    
+    AUCMat <- AUCdata[regulonSelection[[selRegs]],,drop=FALSE]
+
+    col_fun = colorRamp2(c(0, 0.5, 1), c("steelblue3", "#FFFFBF", "#D73027")) 
+    col_fun(seq(-50, 50))
+    
+    hm <- Heatmap(AUCMat, show_column_names = FALSE, name="AUCell score", 
+                    clustering_distance_rows = "euclidean", 
+                    clustering_distance_columns = "euclidean", 
+                    clustering_method_rows = "ward.D", 
+                    clustering_method_columns = "ward.D", 
+                    column_dend_height = unit(1.5, "cm"), row_dend_width = unit(1.5, "cm"), 
+                    width = unit(15, "cm"), height = unit((0.07*dim(AUCMat)[1]), "cm"), 
+                    row_names_gp = gpar(fontsize = 2), column_names_gp = gpar(fontsize = 1),
+                    col=col_fun, top_annotation = col_ann_types
+    )
+    
+    message("Creating heatmap for", selRegs)
+    
+    pdf(paste0(fig_dir, "RegulonActivity_Heatmap_",selRegs,"_ComplexHeatmap_MDD_F.pdf"), width=12.45, height=17.55)
+    draw(hm, merge_legend = TRUE)  
+    dev.off()
+    
+    
+  }
+}
+```
+

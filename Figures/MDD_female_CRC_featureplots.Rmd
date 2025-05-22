@@ -1,0 +1,177 @@
+---
+title: "Feature plots of MDD female dataset"
+output: html_notebook
+---
+
+
+```{r}
+library("BBmisc")
+library("dplyr")
+library("readr")
+library("ggplot2")
+library("openxlsx")
+library("circlize")
+library("RColorBrewer")
+library("magick")
+library("ComplexHeatmap")
+library("VennDiagram")
+library("dendextend")
+library("reticulate")
+library("rjson")
+library("viridis")
+library("readxl")
+library("Seurat")
+
+options(bitmapType = "cairo") #this should prevent white lines in png files
+#also this is possible:
+knitr::opts_chunk$set(dev.args = list(png = list(type = "cairo")))
+```
+
+
+```{r}
+so <- readRDS("/kyukon/scratch/gent/vo/000/gvo00027/projects/CBIGR/21HPP_GRN_neuroinfl/singlecell/Female_samples_MDD/Seurat_MDD_female.rds")
+so
+```
+
+
+Import metadata
+```{r}
+metadata_complete <- read.table("/kyukon/scratch/gent/vo/000/gvo00027/projects/CBIGR/21HPP_GRN_neuroinfl/singlecell/MDD_M_F_metadata.csv", row.names = 1, header = T, sep = ",")
+head(metadata_complete)
+```
+
+```{r}
+# Include diagnosis
+so$Diagnosis <- metadata_complete[Cells(so), "Diagnosis"]
+table(so$Diagnosis)
+```
+
+```{r}
+so <- FindVariableFeatures(so, nfeatures = 2000)
+so
+```
+
+```{r}
+so <- RunPCA(so, npcs = 100)
+ElbowPlot(so, ndims = 100)
+```
+
+
+```{r}
+so <- FindNeighbors(so, dims = 1:20)
+so <- RunUMAP(so, dims = 1:20)
+so
+```
+
+Import regulon activities
+```{r}
+auc <- read.table("/scratch/gent/vo/000/gvo00027/projects/CBIGR/21HPP_GRN_neuroinfl/singlecell/SCENIC_rebuttal_VZZ/MDD_female/MDD_female_AUCmat.csv", 
+                  header=T, 
+                  row.names=1,
+                  sep=",")
+head(auc)
+```
+
+Modify regulon names
+```{r}
+colnames(auc) <- unlist(lapply(lapply(colnames(auc), str_split_1, "_"), "[", 1))
+head(auc)
+```
+
+
+Create new assay
+```{r}
+regulons <- CreateAssayObject(t(auc))
+regulons
+```
+
+```{r}
+so[["Regulons"]] <- regulons
+DefaultAssay(so) <- "Regulons"
+```
+
+DimPlot
+```{r}
+for (ctg in colnames(so@meta.data)) {
+  if (is.character(so@meta.data[,ctg])){
+    
+    p <- DimPlot(so, group.by = ctg) + 
+    ggtitle(paste("UMAP of expression according to", ctg)) +
+    theme(axis.title.x = element_text(size=10), axis.title.y = element_text(size=10), plot.title = element_text(hjust = -0.45))
+    
+    ggsave(paste0("SCENIC_rebuttal_VZZ/scenic_postpr_heatmaps/UMAP_MDD_female_colby_", ctg, ".png"), plot = p)
+    ggsave(paste0("SCENIC_rebuttal_VZZ/scenic_postpr_heatmaps/UMAP_MDD_female_colby_", ctg, ".svg"), plot = p)
+  }
+}
+
+```
+
+
+Feature plots of CRCs
+```{r}
+crc_tfs <- c("IKZF1", "IRF8", "MAF", "NFATC2", "RUNX1", "SPI1", "TAL1", "MAFF", "STAT3", "MYC", "FOS", "JUNB", "CEBPD", "PLSCR1")
+crc_tfs <- crc_tfs[crc_tfs %in% colnames(auc)]
+crc_tfs
+```
+
+
+```{r}
+
+for (reg in crc_tfs) {
+    
+  p <-FeaturePlot(so, features = reg)+ 
+  ggtitle(paste0(reg, "_regulon")) +
+  theme(axis.title.x = element_text( size=10), axis.title.y = element_text(size=10), legend.position = "right",
+  legend.key.height = unit(1.75, "cm"), legend.key.width = unit(1, "cm"))
+  
+  ggsave(paste0("SCENIC_rebuttal_VZZ/scenic_postpr_heatmaps/UMAP_MDD_female_colby_", reg, "activity.png"), plot = p)
+  # ggsave(paste0("SCENIC_rebuttal_VZZ/scenic_postpr_heatmaps/UMAP_MDD_female_colby_", reg, "activity.svg"), plot = p)
+
+}
+
+
+```
+Grid of plots
+```{r}
+plot_list <- list()
+for (reg in crc_tfs[1:7]) {
+    
+  plot_list[[reg]] <-FeaturePlot(so, features = reg)+ 
+    labs(title=paste0(reg, "_regulon"),
+        x ="UMAP_1", y = "UMAP_2")
+
+}
+```
+
+```{r}
+library(cowplot)
+
+png(paste0("SCENIC_rebuttal_VZZ/scenic_postpr_heatmaps/UMAP_MDD_female_colby_RegSET1_activity.png"), width = 750, height =600, units = "px")
+plot_grid(plotlist = plot_list, ncol=3)
+dev.off()
+
+pdf(paste0("SCENIC_rebuttal_VZZ/scenic_postpr_heatmaps/UMAP_MDD_female_colby_RegSET1_activity.pdf"), width = 10)
+plot_grid(plotlist = plot_list, ncol=3, nrow=3)
+dev.off()
+
+```
+```{r}
+plot_list <- list()
+for (reg in crc_tfs[8:length(crc_tfs)]) {
+    
+  plot_list[[reg]] <-FeaturePlot(so, features = reg)+ 
+    labs(title=paste0(reg, "_regulon"),
+        x ="UMAP_1", y = "UMAP_2")
+
+}
+
+
+png(paste0("SCENIC_rebuttal_VZZ/scenic_postpr_heatmaps/UMAP_MDD_female_colby_RegSET2_activity.png"), width = 750, height =600, units = "px")
+plot_grid(plotlist = plot_list, ncol=3, nrow=3)
+dev.off()
+
+pdf(paste0("SCENIC_rebuttal_VZZ/scenic_postpr_heatmaps/UMAP_MDD_female_colby_RegSET2_activity.pdf"), width = 10)
+plot_grid(plotlist = plot_list, ncol=3, nrow=3)
+dev.off()
+```
+
